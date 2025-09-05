@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/moby/api/types/container"
@@ -87,20 +88,44 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 	if err != nil {
 		return fmt.Errorf("failed to parse port specs: %w", err)
 	}
+
+	// --- FIX FOR NETWORKS ---
+	// The keys in this map must be the FULL network names.
 	endpointsConfig := make(map[string]*network.EndpointSettings)
 	for _, netName := range service.Networks {
-		endpointsConfig[netName] = &network.EndpointSettings{
+		fullNetworkName := fmt.Sprintf("%s_%s", projectName, netName)
+		endpointsConfig[fullNetworkName] = &network.EndpointSettings{
 			Aliases: []string{serviceName},
 		}
 	}
+
 	containerName := service.ContainerName
 	if containerName == "" {
 		containerName = serviceName
 	}
+
+	// --- FIX FOR VOLUMES ---
+	// We need to process the Binds to prefix named volumes.
+	var processedBinds []string
+	for _, v := range service.Volumes {
+		parts := strings.SplitN(v, ":", 2)
+		source := parts[0]
+		// Check if it's a named volume (and not a host path bind mount)
+		if !strings.HasPrefix(source, "/") && !strings.HasPrefix(source, ".") {
+			// It's a named volume, so prefix the source with the project name.
+			prefixedSource := fmt.Sprintf("%s_%s", projectName, source)
+			processedBinds = append(processedBinds, fmt.Sprintf("%s:%s", prefixedSource, parts[1]))
+		} else {
+			// It's a bind mount (e.g., /path/on/host:/path/in/container), so use it as-is.
+			processedBinds = append(processedBinds, v)
+		}
+	}
+
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
-		Binds:        service.Volumes,
+		Binds:        processedBinds, // Use the processed list of binds
 	}
+
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:        service.Image,
 		Env:          service.Environment,
