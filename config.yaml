@@ -1,0 +1,7 @@
+repoURL: git@github.com:Sithukyaw666/cd.git
+deploymentDir: /home/stk/test/cd/
+composeFile: docker-compose.yaml
+targetBranch: main
+sshKeyPath: /home/stk/.ssh/id_rsa
+checkInterval: 30
+dockerAPIVersion: 1.48
