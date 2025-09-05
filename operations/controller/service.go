@@ -129,6 +129,7 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:        service.Image,
 		Env:          service.Environment,
+		Cmd:          service.Command,
 		ExposedPorts: exposedPorts,
 		Labels: map[string]string{
 			"com.docker.compose.project": projectName,

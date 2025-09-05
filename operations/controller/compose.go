@@ -13,6 +13,7 @@ type Service struct {
 	Ports         []string `yaml:"ports"`
 	Volumes       []string `yaml:"volumes"`
 	Networks      []string `yaml:"networks"`
+	Command       []string `yaml:"command"`
 }
 
 type Network struct {
