@@ -1,48 +1,64 @@
-# WatcherCD - Docker Compose CI/CD Automation
+# Watcher - Native Docker Compose GitOps Engine
 
 ## Overview
 
-**WatcherCD** is a simple CD tool that automates CI/CD pipelines for Docker Compose environments. It is designed to fill the gap where Docker Compose lacks advanced CI/CD tools like ArgoCD. While tools like **Watchtower** exist for monitoring Docker container images, Watchtower only monitors static tag image tags from the registry. **WatcherCD**, on the other hand, checks for changes in the GitHub repository for Docker Compose YAML file updates. When a change is detected, it pulls the updated files and deploys the changes using Docker Compose.
+**Watcher** is a lightweight GitOps tool that automates deployments for Docker Compose environments. It monitors a Git repository for changes and, upon detection, intelligently applies the desired state by communicating directly with the Docker Engine API.
 
-## Features
-
-- **Monitor GitHub Repositories**: Watch for changes in the Docker Compose YAML file within a specified GitHub repository.
-- **Automated Deployment**: When changes are detected, WatcherCD automatically pulls the updates and deploys them using Docker Compose.
-- **Configurable Check Intervals**: Set the interval at which WatcherCD checks for changes in the repository.
-- **SSH Key Authentication**: Securely access private GitHub repositories using SSH keys.
-
-## Requirements
-
-- **Docker Compose**: WatcherCD interacts with Docker Compose to deploy the services.
-
-## Installation
-
-comming soon
-
-## Configuration
-
-You can configure WatcherCD by editing the `config.yaml` file. Here’s an example configuration:
-
-```yaml
-repoURL: git@github.com:<repository>.git
-deploymentDir: /path/to/your/directory
-composeFile: docker-compose.yaml
-targetBranch: main
-sshKeyPath: /path/to/your/private/key
-checkInterval: 30
-```
-
-### Configuration Fields
-
-- **repoURL**: The SSH URL to your GitHub repository where your Docker Compose YAML file is stored.
-- **deploymentDir**: The directory to store the docker compose file locally.
-- **composeFile**: The name of the Docker Compose YAML file to be deployed (typically `docker-compose.yaml`).
-- **targetBranch**: The branch to monitor for changes in the repository.
-- **sshKeyPath**: The path to your private SSH key used to authenticate with GitHub (useful for private repositories).
-- **checkInterval**: The frequency (in seconds) at which WatcherCD will check for changes in the repository.
+Unlike tools that simply re-run `docker compose up`, Watcher parses the compose file natively in Go. It understands the relationships between services, networks, and volumes, making it a more efficient and integrated solution for continuous deployment.
 
 ## How It Works
 
-1.  WatcherCD checks for changes in the specified GitHub repository at the set interval.
-2.  If a change in the Docker Compose YAML file is detected, WatcherCD pulls the latest changes from the repository.
-3.  After pulling the latest changes, WatcherCD deploys the updated configuration.
+1.  Watcher clones the specified Git repository into a local deployment directory.
+2.  At a set interval (`checkInterval`), it fetches the latest changes for the `targetBranch`.
+3.  If a new commit hash is detected, Watcher parses the `composeFile` (e.g., `docker-compose.yaml`) using a native Go library.
+4.  It builds a dependency graph of all services, networks, and volumes defined in the file.
+5.  Using the Docker Go SDK, it communicates directly with the Docker Engine via the mounted socket to create, update, or remove resources to match the state defined in the compose file.
+
+## Configuration
+
+Watcher is configured via a `config.yaml` file mounted into the container.
+
+### `config.yaml` Parameters
+
+- `repoURL` (string, required): The SSH URL of the Git repository to monitor (e.g., `git@github.com:your-user/your-repo.git`).
+- `deploymentDir` (string, required): The path _inside the container_ where the repository will be cloned (e.g., `/home/appuser/deployment`).
+- `composeFile` (string, required): The name of the compose file within the repository to apply (e.g., `docker-compose.yaml`).
+- `targetBranch` (string, required): The branch to monitor for new commits.
+- `checkInterval` (integer, required): The frequency in seconds at which to check for new commits.
+- `sshKeyPath` (string, optional): The path _inside the container_ to an SSH private key. This is used for authentication if an SSH Agent is not available. See the Authentication section below.
+
+### Authentication
+
+Watcher supports two methods for authenticating with your Git repository and will prioritize the SSH Agent if it is available.
+
+#### 1. SSH Agent (Recommended)
+
+Watcher automatically detects the `SSH_AUTH_SOCK` environment variable inside the container. If found, it will attempt to authenticate using the forwarded SSH agent. This is the most secure method as it avoids mounting private key files into the container.
+
+#### 2. Private Key File
+
+If an SSH agent is not detected or if agent authentication fails, Watcher will use the private key specified by the `sshKeyPath` parameter in the `config.yaml` file.
+
+## Running with Docker
+
+Watcher is designed to be run as a container. Below is a reference `docker-compose.yaml` demonstrating a complete configuration.
+
+**`docker-compose.yaml` Reference:**
+
+```yaml
+services:
+  watcher:
+    image: sithukyaw666/watcher:v0.0.1
+    container_name: my-watcher
+    user: "1000:988" # user id and docker group id
+    restart: unless-stopped
+    environment:
+      - SSH_KNOWN_HOSTS=/home/appuser/.ssh/known_hosts
+      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.yaml:/home/appuser/config.yaml:ro
+      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
+      - ${HOME}/.ssh/id_rsa:/home/appuser/.ssh/id_rsa:ro
+      - ${HOME}/deployment:/home/appuser/deployment
+```

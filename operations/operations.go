@@ -17,10 +17,26 @@ import (
 
 func CloneOrFetchRepo(config model.Config, logger *slog.Logger) (*model.RepoUpdate, error) {
 
+	var auth ssh.AuthMethod
+	var err error
+
+	if os.Getenv("SSH_AUTH_SOCK") != "" {
+		logger.Info("SSH Agent detected, attempting authentication.")
+		auth, err = ssh.NewSSHAgentAuth("git")
+		if err != nil {
+			logger.Warn("SSH agent auth failed, will attemp key file.", "error", err)
+		}
+	}
 	// Create the SSH authentication method with the private key
-	auth, err := ssh.NewPublicKeysFromFile("git", config.SSHKeyPath, "")
-	if err != nil {
-		return nil, fmt.Errorf("could not create SSH authentication: %w", err)
+	if auth == nil {
+		if config.SSHKeyPath == "" {
+			return nil, fmt.Errorf("no SSH agent found and sshKeyPath is not configured")
+		}
+		logger.Info("Using SSH key file for authentication.", "path", config.SSHKeyPath)
+		auth, err = ssh.NewPublicKeysFromFile("git", config.SSHKeyPath, "")
+		if err != nil {
+			return nil, fmt.Errorf("could not create SSH authentication: %w", err)
+		}
 	}
 
 	repo, err := git.PlainOpen(config.DeploymentDir)
@@ -62,6 +78,7 @@ func CloneOrFetchRepo(config model.Config, logger *slog.Logger) (*model.RepoUpda
 
 	err = repo.Fetch(&git.FetchOptions{
 		RemoteName: "origin",
+		Auth:       auth,
 		Force:      true,
 	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
