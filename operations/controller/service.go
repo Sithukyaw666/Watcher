@@ -46,7 +46,17 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 					logger.Error("Failed to create new service", "error", err)
 				}
 			} else {
-				logger.Info("Service is up-to-date.", "service_name", serviceName)
+				if actualContainer.State != "running" {
+					logger.Info("Container exists but is not running. Starting...", "service_name", serviceName, "container_id", actualContainer.ID[:12], "current_status", actualContainer.State)
+					if err := cli.ContainerStart(ctx, actualContainer.ID, container.StartOptions{}); err != nil {
+						logger.Error("Failed to start the container", "service_name", serviceName, "error", err)
+					} else {
+						logger.Info("Container started successfully.", "service_name", serviceName)
+					}
+				} else {
+
+					logger.Info("Service is up-to-date.", "service_name", serviceName)
+				}
 			}
 		} else {
 			logger.Info("Service not found. Creating...", "service_name", serviceName)
@@ -89,7 +99,6 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 		return fmt.Errorf("failed to parse port specs: %w", err)
 	}
 
-	// --- FIX FOR NETWORKS ---
 	// The keys in this map must be the FULL network names.
 	endpointsConfig := make(map[string]*network.EndpointSettings)
 	for _, netName := range service.Networks {
@@ -104,20 +113,23 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 		containerName = serviceName
 	}
 
-	// --- FIX FOR VOLUMES ---
 	// We need to process the Binds to prefix named volumes.
 	var processedBinds []string
 	for _, v := range service.Volumes {
 		parts := strings.SplitN(v, ":", 2)
-		source := parts[0]
-		// Check if it's a named volume (and not a host path bind mount)
-		if !strings.HasPrefix(source, "/") && !strings.HasPrefix(source, ".") {
-			// It's a named volume, so prefix the source with the project name.
-			prefixedSource := fmt.Sprintf("%s_%s", projectName, source)
-			processedBinds = append(processedBinds, fmt.Sprintf("%s:%s", prefixedSource, parts[1]))
+		if len(parts) == 2 {
+			source := parts[0]
+			// Check if it's a named volume (and not a host path bind mount)
+			if !strings.HasPrefix(source, "/") && !strings.HasPrefix(source, ".") {
+				// It's a named volume, so prefix the source with the project name.
+				prefixedSource := fmt.Sprintf("%s_%s", projectName, source)
+				processedBinds = append(processedBinds, fmt.Sprintf("%s:%s", prefixedSource, parts[1]))
+			} else {
+				// It's a bind mount (e.g., /path/on/host:/path/in/container), so use it as-is.
+				processedBinds = append(processedBinds, v)
+			}
 		} else {
-			// It's a bind mount (e.g., /path/on/host:/path/in/container), so use it as-is.
-			processedBinds = append(processedBinds, v)
+			logger.Warn("Skipping malformed volume definition", "volume_string", v)
 		}
 	}
 
