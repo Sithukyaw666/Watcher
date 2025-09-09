@@ -2,19 +2,17 @@ package controller
 
 import (
 	"context"
-	"crypto/des"
 	"fmt"
-	"io"
-	"log/slog"
-	"strings"
-	"time"
-
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/sithukyaw666/watcher/utils"
+	"io"
+	"log/slog"
+	"strings"
+	"time"
 )
 
 // ReconcileServices handles the reconciliation of all services defined in the compose configuration
