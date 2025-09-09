@@ -2,26 +2,56 @@ package controller
 
 import (
 	"context"
+	"crypto/des"
 	"fmt"
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
+	"github.com/sithukyaw666/watcher/utils"
 )
 
 // ReconcileServices handles the reconciliation of all services defined in the compose configuration
 // against the actual running containers. It creates new services or updates existing ones as needed.
 func ReconcileServices(ctx context.Context, cli *client.Client, projectName string, compose *Compose, actualState map[string]container.Summary, logger *slog.Logger) error {
-	for serviceName, desiredService := range compose.Services {
+	depMap := make(map[string][]string)
+	for name, service := range compose.Services {
+		depMap[name] = service.DependsOn
+	}
+
+	orderServices, err := utils.ResolveDependencyOrder(depMap)
+	if err != nil {
+		logger.Error("Failed to resolve service dependency order", "error", err)
+		return err
+	}
+	logger.Info("Service reconciliation order", "order", orderServices)
+	for _, serviceName := range orderServices {
+		desiredService := compose.Services[serviceName]
 		logger.Info("Reconciling service", "service_name", serviceName)
+
+		for _, depName := range desiredService.DependsOn {
+			depService := compose.Services[depName]
+			depContainer, ok := actualState[depName]
+			if !ok {
+				logger.Error("Dependency container not found in actual state.", "service", serviceName, "dependency", depName)
+				return fmt.Errorf("dependency '%s' for service '%s' not found", depName, serviceName)
+			}
+			if depService.HealthCheck != nil && len(depService.HealthCheck.Test) > 0 {
+				logger.Info("Waiting for dependency to be healthy", "service", serviceName, "dependency", depName)
+				if err := waitForHealthCheck(ctx, cli, depContainer.ID, logger); err != nil {
+					logger.Error("Dependency failed health check", "service", serviceName, "dependency", depName, "error", err)
+				}
+			}
+		}
+
 		if actualContainer, ok := actualState[serviceName]; ok {
 			logger.Info("Service exists. Checking for image updates...", "service_name", serviceName)
-
 			if err := pullImage(ctx, cli, desiredService.Image, logger); err != nil {
 				logger.Warn("Could not pull image. Skipping update check.", "image", desiredService.Image, "error", err)
 				continue
@@ -32,32 +62,33 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 				continue
 			}
 			if actualContainer.ImageID != desiredImg.ID {
-				logger.Info("Image has changed for service. Re-creating...", "service_name", serviceName)
+				logger.Info("Image has change for service. Re-creating...", "service_name", serviceName)
 				logger.Info("Stopping old container", "container_id", actualContainer.ID[:12])
 				if err := cli.ContainerStop(ctx, actualContainer.ID, container.StopOptions{}); err != nil {
 					logger.Error("Failed to stop container", "error", err)
 					continue
 				}
-
 				if err := cli.ContainerRemove(ctx, actualContainer.ID, container.RemoveOptions{}); err != nil {
 					logger.Error("Failed to remove container", "error", err)
+					continue
 				}
 				if err := createService(ctx, cli, projectName, serviceName, &desiredService, logger); err != nil {
 					logger.Error("Failed to create new service", "error", err)
+
 				}
 			} else {
 				if actualContainer.State != "running" {
-					logger.Info("Container exists but is not running. Starting...", "service_name", serviceName, "container_id", actualContainer.ID[:12], "current_status", actualContainer.State)
+					logger.Warn("Container exists but is not running. Starting...", "service_name", serviceName, "container_id", actualContainer.ID[:12], "current_status", actualContainer.State)
 					if err := cli.ContainerStart(ctx, actualContainer.ID, container.StartOptions{}); err != nil {
-						logger.Error("Failed to start the container", "service_name", serviceName, "error", err)
+						logger.Error("Failed to start the container", "service_name", serviceName)
 					} else {
 						logger.Info("Container started successfully.", "service_name", serviceName)
 					}
 				} else {
-
-					logger.Info("Service is up-to-date.", "service_name", serviceName)
+					logger.Info("Service is up-to-date and running", "service_name", serviceName)
 				}
 			}
+
 		} else {
 			logger.Info("Service not found. Creating...", "service_name", serviceName)
 			if err := createService(ctx, cli, projectName, serviceName, &desiredService, logger); err != nil {
@@ -65,6 +96,7 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 			}
 		}
 	}
+
 	logger.Info("Checking for orphan services to prune...")
 	for serviceName, serviceContainer := range actualState {
 		if _, existsInDesired := compose.Services[serviceName]; !existsInDesired {
@@ -133,6 +165,38 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 		}
 	}
 
+	var healthConfig *container.HealthConfig
+	if service.HealthCheck != nil && len(service.HealthCheck.Test) > 0 {
+		var interval, timeout, startPeriod time.Duration
+		var err error
+		if service.HealthCheck.Interval != "" {
+			interval, err = time.ParseDuration(service.HealthCheck.Interval)
+			if err != nil {
+				return fmt.Errorf("invalid healthcheck interval format '%s': %w", service.HealthCheck.Interval, err)
+			}
+		}
+		if service.HealthCheck.Timeout != "" {
+			timeout, err = time.ParseDuration(service.HealthCheck.Timeout)
+			if err != nil {
+				return fmt.Errorf("invalid healthcheck timeout format '%s': %w", service.HealthCheck.Timeout, err)
+			}
+		}
+		if service.HealthCheck.StartPeriod != "" {
+			startPeriod, err = time.ParseDuration(service.HealthCheck.StartPeriod)
+			if err != nil {
+				return fmt.Errorf("invalid healthcheck start_period format '%s': %w", service.HealthCheck.StartPeriod, err)
+			}
+		}
+
+		healthConfig = &container.HealthConfig{
+			Test:        service.HealthCheck.Test,
+			Interval:    interval,
+			Timeout:     timeout,
+			Retries:     service.HealthCheck.Retries,
+			StartPeriod: startPeriod,
+		}
+	}
+
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
 		Binds:        processedBinds, // Use the processed list of binds
@@ -143,6 +207,7 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 		Env:          service.Environment,
 		Cmd:          service.Command,
 		ExposedPorts: exposedPorts,
+		Healthcheck:  healthConfig,
 		Labels: map[string]string{
 			"com.docker.compose.project": projectName,
 			"com.docker.compose.service": serviceName,
@@ -170,4 +235,29 @@ func pullImage(ctx context.Context, cli *client.Client, imageName string, logger
 	defer out.Close()
 	io.Copy(io.Discard, out)
 	return nil
+}
+
+func waitForHealthCheck(ctx context.Context, cli *client.Client, containerID string, logger *slog.Logger) error {
+	logger.Info("Waiting for container to be healthy", "container_id", containerID[:12])
+
+	for i := 0; i < 60; i++ {
+		inspect, err := cli.ContainerInspect(ctx, containerID)
+		if err != nil {
+			return fmt.Errorf("failed to inspect container %s: %w", containerID, err)
+		}
+		if inspect.State != nil && inspect.State.Health != nil {
+			status := inspect.State.Health.Status
+			logger.Info("Container health status", "container_id", containerID[:12], "status", status)
+			switch status {
+			case "healthy":
+				logger.Info("Container is healthy", "container_id", containerID[:12])
+				return nil
+			case "unhealthy":
+				return fmt.Errorf("container %s is unhealthy", containerID)
+
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}
+	return fmt.Errorf("timed out waiting for container %s to become healthy", containerID)
 }

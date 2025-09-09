@@ -6,13 +6,24 @@
 
 Unlike tools that simply re-run `docker compose up`, Watcher parses the compose file natively in Go. It understands the relationships between services, networks, and volumes, making it a more efficient and integrated solution for continuous deployment.
 
+## Core Features
+
+- **Native Go Implementation**: Directly interacts with the Docker Engine API for efficient and precise control over containers, networks, and volumes.
+- **Dependency-Aware Deployments**: Understands `depends_on` relationships between services to ensure they are started in the correct topological order.
+- **Healthcheck-Aware Startup**: Waits for services with a defined `healthcheck` to become healthy before starting any services that depend on them. This prevents cascading failures in multi-service applications.
+- **Intelligent Updates**: Detects changes to image tags and automatically re-creates services to deploy new versions, leaving unchanged services untouched.
+- **Orphan Pruning**: Automatically detects and removes services that are running but are no longer defined in the compose file.
+
 ## How It Works
 
-1.  Watcher clones the specified Git repository into a local deployment directory.
-2.  At a set interval (`checkInterval`), it fetches the latest changes for the `targetBranch`.
-3.  If a new commit hash is detected, Watcher parses the `composeFile` (e.g., `docker-compose.yaml`) using a native Go library.
-4.  It builds a dependency graph of all services, networks, and volumes defined in the file.
-5.  Using the Docker Go SDK, it communicates directly with the Docker Engine via the mounted socket to create, update, or remove resources to match the state defined in the compose file.
+1.  **Monitor Git**: Clones a Git repository and monitors a specific branch for new commits.
+2.  **Parse Compose File**: When a change is detected, it natively parses the `docker-compose.yaml` file.
+3.  **Build Dependency Graph**: Analyzes `depends_on` relationships to determine the correct startup order.
+4.  **Reconcile State**: Communicates directly with the Docker Engine API to:
+    - Create or update services in the correct order.
+    - Wait for dependencies to pass their health checks before starting dependent services.
+    - Re-create services if their image has changed.
+    - Remove orphaned services no longer in the compose file.
 
 ## Configuration
 

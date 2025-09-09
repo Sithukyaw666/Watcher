@@ -28,3 +28,42 @@ func LoadConfig() (model.Config, error) {
 	return *config, nil
 
 }
+
+func ResolveDependencyOrder(depMap map[string][]string) ([]string, error) {
+	var ordered []string
+	visiting := make(map[string]bool)
+	visited := make(map[string]bool)
+	var visit func(nodeName string) error
+
+	visit = func(nodeName string) error {
+		if visiting[nodeName] {
+			return fmt.Errorf("circular dependency detected: %s", nodeName)
+		}
+		if visited[nodeName] {
+			return nil
+		}
+		if _, ok := depMap[nodeName]; !ok {
+			return fmt.Errorf("service '%s' is a dependency but is not defined", nodeName)
+		}
+		visiting[nodeName] = true
+
+		dependencies := depMap[nodeName]
+		for _, dep := range dependencies {
+			if err := visit(dep); err != nil {
+				return err
+			}
+		}
+		visiting[nodeName] = false
+		visited[nodeName] = true
+		ordered = append(ordered, nodeName)
+		return nil
+	}
+	for nodeName := range depMap {
+		if !visited[nodeName] {
+			if err := visit(nodeName); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return ordered, nil
+}
