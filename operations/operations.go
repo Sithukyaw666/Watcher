@@ -132,6 +132,34 @@ func CloneOrFetchRepo(config model.Config, logger *slog.Logger) (*model.RepoUpda
 	}, nil
 }
 
+func GetCurrentHash(config model.Config) (string, error) {
+	repo, err := git.PlainOpen(config.DeploymentDir)
+	if err != nil {
+		return "", err
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	return head.Hash().String(), nil
+}
+
+func CheckoutHash(config model.Config, hash string, logger *slog.Logger) error {
+	repo, err := git.PlainOpen(config.DeploymentDir)
+	if err != nil {
+		return err
+	}
+	w, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	logger.Info("Checking out commit", "hash", hash)
+	return w.Checkout(&git.CheckoutOptions{
+		Hash:  plumbing.NewHash(hash),
+		Force: true,
+	})
+}
+
 func Deploy(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger) error {
 	composePath := filepath.Join(config.DeploymentDir, config.ComposeFile)
 

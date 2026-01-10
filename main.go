@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/moby/moby/client"
+	"github.com/sithukyaw666/watcher/internal/store"
 	"github.com/sithukyaw666/watcher/model"
 	"github.com/sithukyaw666/watcher/operations"
 	"github.com/sithukyaw666/watcher/utils"
@@ -67,8 +68,15 @@ func main() {
 	}
 	defer cli.Close()
 
+	s, err := store.NewStore("watcher.db")
+	if err != nil {
+		logger.Error("Failed to initiate store", "error", err)
+		os.Exit(1)
+	}
+	defer s.Close()
+
 	logger.Info("Performing initial reconciliation check...")
-	runCycle(ctx, cli, config, logger) // Pass logger
+	runCycle(ctx, cli, config, logger, s) // Pass logger
 
 	ticker := time.NewTicker(time.Duration(config.CheckInterval) * time.Second)
 	defer ticker.Stop()
@@ -80,17 +88,24 @@ func main() {
 			return
 		case <-ticker.C:
 			logger.Info("Running periodic reconciliation check...")
-			runCycle(ctx, cli, config, logger) // Pass logger
+			runCycle(ctx, cli, config, logger, s) // Pass logger
 		}
 	}
 }
 
-func runCycle(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger) {
+func runCycle(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger, s *store.Store) {
 	update, err := operations.CloneOrFetchRepo(config, logger) // Pass logger
 	if err != nil {
 		logger.Error("ERROR during git operation", "error", err)
 		return
 	}
+
+	currentHash, err := operations.GetCurrentHash(config)
+	if err != nil {
+		logger.Error("Failed to get current hash", "error", err)
+		return
+	}
+
 	if update != nil {
 		logger.Info("Changed detected, starting deployment...")
 	} else {
@@ -98,6 +113,51 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 	}
 
 	if err := operations.Deploy(ctx, cli, config, logger); err != nil { // Pass logger
-		logger.Error("ERROR during reconciliation", "error", err)
+		logger.Error("Deployment FAILED", "hash", currentHash, "error", err)
+
+		s.AddDeployment(store.Deployment{
+			ID:         time.Now().Format(time.RFC3339Nano),
+			CommitHash: currentHash,
+			Timestamp:  time.Now(),
+			Status:     store.StatusFailed,
+			Config:     config,
+		})
+
+		logger.Info("Initiating automatic rollback...")
+
+		lastSuccess, err := s.GetLastSuccessfulDeployment()
+		if err != nil {
+			logger.Error("Rollback aborted: No successful deployment history found", "error", err)
+			return
+		}
+		if lastSuccess.CommitHash == currentHash {
+			logger.Warn("Rollback aborted: Last success is the same as current hash. System is fundamentally broken.")
+			return
+		}
+
+		logger.Info("Rolling back to last known healthy state", "hash", lastSuccess.CommitHash)
+
+		if err := operations.CheckoutHash(config, lastSuccess.CommitHash, logger); err != nil {
+			logger.Error("Rollback Failed: Could not checkout previous hash", "error", err)
+			return
+		}
+
+		if err := operations.Deploy(ctx, cli, config, logger); err != nil {
+			logger.Error("Rollback Failed: Could not re-deploy old state", "error", err)
+			return
+		} else {
+			logger.Info("Rollback Successful: Re-deployed to the previous healthy state.")
+		}
+	}
+	logger.Info("Deployment Successful", "hash", currentHash)
+	if update != nil {
+		logger.Info("New Deployment: Saving to state db...")
+		s.AddDeployment(store.Deployment{
+			ID:         time.Now().Format(time.RFC3339Nano),
+			CommitHash: currentHash,
+			Timestamp:  time.Now(),
+			Status:     store.StatusSuccess,
+			Config:     config,
+		})
 	}
 }
