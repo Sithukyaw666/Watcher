@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/sithukyaw666/watcher/internal/monitor"
 	"github.com/sithukyaw666/watcher/operations/controller"
 )
 
@@ -22,10 +23,11 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 type GraphNode struct {
-	ID        string   `json:"id"`
-	Image     string   `json:"image"`
-	DependsOn []string `json:"depends_on"`
-	Status    string   `json:"status"`
+	ID          string   `json:"id"`
+	Image       string   `json:"image"`
+	DependsOn   []string `json:"depends_on"`
+	Status      string   `json:"status"`
+	ContainerID string   `json:"container_id"`
 }
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -36,13 +38,24 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectName := filepath.Base(s.config.DeploymentDir)
+	statusMap, err := monitor.GetProjectStatus(r.Context(), s.docker, projectName)
+	if err != nil {
+		s.logger.Warn("Failed to get container statuses", "error", err)
+	}
+
 	var graph []GraphNode
 	for name, service := range compose.Services {
 		node := GraphNode{
-			ID:        name,
-			Image:     service.Image,
-			DependsOn: service.DependsOn,
-			Status:    "unknown",
+			ID:          name,
+			Image:       service.Image,
+			DependsOn:   service.DependsOn,
+			ContainerID: "unknown",
+			Status:      "unknown",
+		}
+		if info, ok := statusMap[name]; ok {
+			node.Status = info.Status
+			node.ContainerID = info.ContainerID
 		}
 		graph = append(graph, node)
 	}
