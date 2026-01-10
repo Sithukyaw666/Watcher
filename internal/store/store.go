@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sithukyaw666/watcher/model"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -16,11 +15,12 @@ const (
 )
 
 type Deployment struct {
-	ID         string       `json:"id"`
-	CommitHash string       `json:"commit_hash"`
-	Timestamp  time.Time    `json:"timestamp"`
-	Status     string       `json:"status"`
-	Config     model.Config `json:"config"`
+	ID            string    `json:"id"`
+	CommitHash    string    `json:"commit_hash"`
+	Timestamp     time.Time `json:"timestamp"`
+	Status        string    `json:"status"`
+	CommitMessage string    `json:"commit_message"`
+	CommitAuthor  string    `json:"commit_author"`
 }
 
 type Store struct {

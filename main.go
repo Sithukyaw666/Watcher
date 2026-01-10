@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/moby/moby/client"
+	"github.com/sithukyaw666/watcher/internal/api"
 	"github.com/sithukyaw666/watcher/internal/store"
 	"github.com/sithukyaw666/watcher/model"
 	"github.com/sithukyaw666/watcher/operations"
@@ -75,22 +76,31 @@ func main() {
 	}
 	defer s.Close()
 
+	apiServer := api.NewServer(8080, s, cli, config, logger)
+
+	go func() {
+		if err := apiServer.Start(); err != nil {
+			logger.Error("API server failed", "error", err)
+		}
+	}()
+
 	logger.Info("Performing initial reconciliation check...")
 	runCycle(ctx, cli, config, logger, s) // Pass logger
 
 	ticker := time.NewTicker(time.Duration(config.CheckInterval) * time.Second)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("Shutdown signal received. Exiting gracefully.")
+			apiServer.Shutdown(ctx)
 			return
 		case <-ticker.C:
 			logger.Info("Running periodic reconciliation check...")
 			runCycle(ctx, cli, config, logger, s) // Pass logger
 		}
 	}
+
 }
 
 func runCycle(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger, s *store.Store) {
@@ -105,6 +115,11 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 		logger.Error("Failed to get current hash", "error", err)
 		return
 	}
+	commitMessage, commitAuthor, err := operations.GetCommitInfo(config, currentHash)
+	if err != nil {
+		logger.Error("Failed to get commit info", "error", err)
+		return
+	}
 
 	if update != nil {
 		logger.Info("Changed detected, starting deployment...")
@@ -116,11 +131,12 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 		logger.Error("Deployment FAILED", "hash", currentHash, "error", err)
 
 		s.AddDeployment(store.Deployment{
-			ID:         time.Now().Format(time.RFC3339Nano),
-			CommitHash: currentHash,
-			Timestamp:  time.Now(),
-			Status:     store.StatusFailed,
-			Config:     config,
+			ID:            time.Now().Format(time.RFC3339Nano),
+			CommitHash:    currentHash,
+			Timestamp:     time.Now(),
+			Status:        store.StatusFailed,
+			CommitMessage: commitMessage,
+			CommitAuthor:  commitAuthor,
 		})
 
 		logger.Info("Initiating automatic rollback...")
@@ -153,11 +169,12 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 	if update != nil {
 		logger.Info("New Deployment: Saving to state db...")
 		s.AddDeployment(store.Deployment{
-			ID:         time.Now().Format(time.RFC3339Nano),
-			CommitHash: currentHash,
-			Timestamp:  time.Now(),
-			Status:     store.StatusSuccess,
-			Config:     config,
+			ID:            time.Now().Format(time.RFC3339Nano),
+			CommitHash:    currentHash,
+			Timestamp:     time.Now(),
+			Status:        store.StatusSuccess,
+			CommitMessage: commitMessage,
+			CommitAuthor:  commitAuthor,
 		})
 	}
 }

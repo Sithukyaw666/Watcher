@@ -43,9 +43,8 @@ func CloneOrFetchRepo(config model.Config, logger *slog.Logger) (*model.RepoUpda
 	if err == git.ErrRepositoryNotExists {
 		logger.Info("Repository not found, cloning...", "deployment_dir", config.DeploymentDir)
 		_, err = git.PlainClone(config.DeploymentDir, false, &git.CloneOptions{
-			URL:      config.RepoURL,
-			Auth:     auth,
-			Progress: os.Stdout,
+			URL:  config.RepoURL,
+			Auth: auth,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to clone repository: %w", err)
@@ -158,6 +157,19 @@ func CheckoutHash(config model.Config, hash string, logger *slog.Logger) error {
 		Hash:  plumbing.NewHash(hash),
 		Force: true,
 	})
+}
+
+func GetCommitInfo(config model.Config, hash string) (string, string, error) {
+	repo, err := git.PlainOpen(config.DeploymentDir)
+	if err != nil {
+		return "", "", err
+	}
+
+	commitObj, err := repo.CommitObject(plumbing.NewHash(hash))
+	if err != nil {
+		return "", "", err
+	}
+	return commitObj.Message, commitObj.Author.Name, nil
 }
 
 func Deploy(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger) error {
