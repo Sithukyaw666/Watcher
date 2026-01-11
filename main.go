@@ -87,15 +87,13 @@ func main() {
 	logger.Info("Performing initial reconciliation check...")
 	runCycle(ctx, cli, config, logger, s) // Pass logger
 
-	ticker := time.NewTicker(time.Duration(config.CheckInterval) * time.Second)
-	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("Shutdown signal received. Exiting gracefully.")
 			apiServer.Shutdown(ctx)
 			return
-		case <-ticker.C:
+		case <-time.After(time.Duration(config.CheckInterval) * time.Second):
 			logger.Info("Running periodic reconciliation check...")
 			runCycle(ctx, cli, config, logger, s) // Pass logger
 		}
