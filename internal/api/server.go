@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/moby/moby/client"
@@ -19,9 +21,10 @@ type Server struct {
 	config model.Config
 	logger *slog.Logger
 	server *http.Server
+	uiFS   fs.FS
 }
 
-func NewServer(port int, store *store.Store, docker *client.Client, config model.Config, logger *slog.Logger) *Server {
+func NewServer(port int, store *store.Store, docker *client.Client, config model.Config, logger *slog.Logger, uiFS fs.FS) *Server {
 	mux := http.NewServeMux()
 
 	s := &Server{
@@ -29,6 +32,7 @@ func NewServer(port int, store *store.Store, docker *client.Client, config model
 		docker: docker,
 		config: config,
 		logger: logger,
+		uiFS:   uiFS,
 	}
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
@@ -39,17 +43,17 @@ func NewServer(port int, store *store.Store, docker *client.Client, config model
 	mux.HandleFunc("GET /api/stream/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/stream/logs", s.handleLogs)
 
-	handler := s.enableCORS(s.logMiddleWare(mux))
-
+	mux.Handle("/", s.enableCORS(s.logMiddleWare(s.spaHandler())))
 	s.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: handler,
+		Handler: mux,
 	}
 	return s
 }
 
 func (s *Server) Start() error {
-	s.logger.Info("API Server starting", "addr", s.server.Addr)
+	s.logger.Info("API Server starting", "adhandler,dr", s.server.Addr)
+
 	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
@@ -79,6 +83,27 @@ func (s *Server) logMiddleWare(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		s.logger.Debug("API Request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
 	})
+}
+
+func (s *Server) spaHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+
+		f, err := s.uiFS.Open(path)
+		if err == nil {
+			f.Close()
+			http.FileServer(http.FS(s.uiFS)).ServeHTTP(w, r)
+			return
+		}
+
+		content, err := fs.ReadFile(s.uiFS, "index.html")
+		if err != nil {
+			http.Error(w, "UI not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(content)
+	}
 }
 
 func (s *Server) responseJSON(w http.ResponseWriter, status int, payload interface{}) {

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"embed"
 	"flag"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -16,6 +18,9 @@ import (
 	"github.com/sithukyaw666/watcher/operations"
 	"github.com/sithukyaw666/watcher/utils"
 )
+
+//go:embed web
+var content embed.FS
 
 func main() {
 	// Create structured logger
@@ -76,7 +81,13 @@ func main() {
 	}
 	defer s.Close()
 
-	apiServer := api.NewServer(8080, s, cli, config, logger)
+	uiFS, err := fs.Sub(content, "web")
+	if err != nil {
+		logger.Error("Failed to load UI assets", "error", err)
+		os.Exit(1)
+	}
+
+	apiServer := api.NewServer(8080, s, cli, config, logger, uiFS)
 
 	go func() {
 		if err := apiServer.Start(); err != nil {
