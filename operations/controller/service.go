@@ -70,9 +70,12 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 					logger.Error("Failed to remove container", "error", err)
 					continue
 				}
-				if err := createService(ctx, cli, projectName, serviceName, &desiredService, logger); err != nil {
+				newID, err := createService(ctx, cli, projectName, serviceName, &desiredService, logger)
+				if err != nil {
 					logger.Error("Failed to create new service", "error", err)
 
+				} else {
+					actualState[serviceName] = container.Summary{ID: newID, State: "running"}
 				}
 			} else {
 				if actualContainer.State != "running" {
@@ -89,8 +92,11 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 
 		} else {
 			logger.Info("Service not found. Creating...", "service_name", serviceName)
-			if err := createService(ctx, cli, projectName, serviceName, &desiredService, logger); err != nil {
+			newID, err := createService(ctx, cli, projectName, serviceName, &desiredService, logger)
+			if err != nil {
 				logger.Error("Failed to create new service", "error", err)
+			} else {
+				actualState[serviceName] = container.Summary{ID: newID, State: "running"}
 			}
 		}
 	}
@@ -116,17 +122,17 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 }
 
 // createService creates and starts a new Docker container for the specified service
-func createService(ctx context.Context, cli *client.Client, projectName string, serviceName string, service *Service, logger *slog.Logger) error {
+func createService(ctx context.Context, cli *client.Client, projectName string, serviceName string, service *Service, logger *slog.Logger) (string, error) {
 	logger.Info("Creating service", "service_name", serviceName)
 
 	if err := pullImage(ctx, cli, service.Image, logger); err != nil {
-		return fmt.Errorf("failed to pull image %s: %w", service.Image, err)
+		return "", fmt.Errorf("failed to pull image %s: %w", service.Image, err)
 	}
 	logger.Info("Image pulled successfully.", "image", service.Image)
 
 	exposedPorts, portBindings, err := nat.ParsePortSpecs(service.Ports)
 	if err != nil {
-		return fmt.Errorf("failed to parse port specs: %w", err)
+		return "", fmt.Errorf("failed to parse port specs: %w", err)
 	}
 
 	// The keys in this map must be the FULL network names.
@@ -170,19 +176,19 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 		if service.HealthCheck.Interval != "" {
 			interval, err = time.ParseDuration(service.HealthCheck.Interval)
 			if err != nil {
-				return fmt.Errorf("invalid healthcheck interval format '%s': %w", service.HealthCheck.Interval, err)
+				return "", fmt.Errorf("invalid healthcheck interval format '%s': %w", service.HealthCheck.Interval, err)
 			}
 		}
 		if service.HealthCheck.Timeout != "" {
 			timeout, err = time.ParseDuration(service.HealthCheck.Timeout)
 			if err != nil {
-				return fmt.Errorf("invalid healthcheck timeout format '%s': %w", service.HealthCheck.Timeout, err)
+				return "", fmt.Errorf("invalid healthcheck timeout format '%s': %w", service.HealthCheck.Timeout, err)
 			}
 		}
 		if service.HealthCheck.StartPeriod != "" {
 			startPeriod, err = time.ParseDuration(service.HealthCheck.StartPeriod)
 			if err != nil {
-				return fmt.Errorf("invalid healthcheck start_period format '%s': %w", service.HealthCheck.StartPeriod, err)
+				return "", fmt.Errorf("invalid healthcheck start_period format '%s': %w", service.HealthCheck.StartPeriod, err)
 			}
 		}
 
@@ -214,14 +220,14 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 		EndpointsConfig: endpointsConfig,
 	}, nil, containerName)
 	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
+		return "", fmt.Errorf("failed to create container: %w", err)
 	}
 
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
+		return "", fmt.Errorf("failed to start container: %w", err)
 	}
 	logger.Info("Successfully created and started service", "service_name", serviceName, "container_id", resp.ID[:12])
-	return nil
+	return resp.ID, nil
 }
 
 // pullImage pulls the specified Docker image from the registry
