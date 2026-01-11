@@ -11,11 +11,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/moby/moby/client"
+	"github.com/sithukyaw666/watcher/internal/store"
 	"github.com/sithukyaw666/watcher/model"
 	"github.com/sithukyaw666/watcher/operations/controller"
 )
 
-func CloneOrFetchRepo(config model.Config, logger *slog.Logger) (*model.RepoUpdate, error) {
+func CloneOrFetchRepo(config model.Config, logger *slog.Logger, s *store.Store) (*model.RepoUpdate, error) {
 
 	var auth ssh.AuthMethod
 	var err error
@@ -92,10 +93,19 @@ func CloneOrFetchRepo(config model.Config, logger *slog.Logger) (*model.RepoUpda
 
 	newHash := remoteRef.Hash()
 
+	lastAttempt, err := s.GetLastDeployment()
+	if err == nil && lastAttempt != nil {
+		if lastAttempt.CommitHash == newHash.String() && lastAttempt.Status == store.StatusFailed {
+			logger.Warn("Remote commit matches last known failure. Skipping update. ", "hash", newHash.String())
+			return nil, nil
+		}
+	}
+
 	if oldHash == newHash {
 		logger.Info("Repository is already up-to-date")
 		return nil, nil
 	}
+
 	logger.Info("Updating repository", "old_hash", oldHash, "new_hash", newHash)
 
 	w, err := repo.Worktree()

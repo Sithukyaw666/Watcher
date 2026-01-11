@@ -111,3 +111,31 @@ func (s *Store) GetAllDeployments() ([]Deployment, error) {
 
 	return deployments, err
 }
+
+func (s *Store) GetLastDeployment() (*Deployment, error) {
+	var lastDeploy *Deployment
+
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("deployment"))
+		c := b.Cursor()
+		k, v := c.Last()
+		if k == nil {
+			return nil
+		}
+		var d Deployment
+		if err := json.Unmarshal(v, &d); err != nil {
+			return err
+		}
+
+		lastDeploy = &d
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	if lastDeploy == nil {
+		return nil, fmt.Errorf("no history found")
+	}
+	return lastDeploy, nil
+}

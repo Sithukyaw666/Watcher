@@ -119,7 +119,7 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 		"message":   "Syncing repository...",
 		"timestamp": time.Now(),
 	})
-	update, err := operations.CloneOrFetchRepo(config, logger) // Pass logger
+	update, err := operations.CloneOrFetchRepo(config, logger, s) // Pass logger
 	if err != nil {
 		logger.Error("ERROR during git operation", "error", err)
 		return
