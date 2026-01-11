@@ -9,6 +9,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/filters"
 	"github.com/sithukyaw666/watcher/internal/monitor"
+	"github.com/sithukyaw666/watcher/operations"
 	"github.com/sithukyaw666/watcher/operations/controller"
 )
 
@@ -32,6 +33,7 @@ type GraphNode struct {
 	DependsOn   []string `json:"depends_on"`
 	Status      string   `json:"status"`
 	ContainerID string   `json:"container_id"`
+	State       string   `json:"state"`
 }
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -56,15 +58,37 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 			DependsOn:   service.DependsOn,
 			ContainerID: "unknown",
 			Status:      "unknown",
+			State:       "unknown",
 		}
 		if info, ok := statusMap[name]; ok {
 			node.Status = info.Status
 			node.ContainerID = info.ContainerID
+			node.State = info.State
 		}
 		graph = append(graph, node)
 	}
 
 	s.responseJSON(w, http.StatusOK, graph)
+}
+
+func (s *Server) handleHistoryView(w http.ResponseWriter, r *http.Request) {
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		s.responseJSON(w, http.StatusBadRequest, map[string]string{"error": "hash is required"})
+		return
+	}
+
+	content, err := operations.GetComposeContent(s.config, hash)
+	if err != nil {
+		s.logger.Error("Failed to fetch git snapshot", "hash", hash, "error", err)
+		s.responseJSON(w, http.StatusNotFound, map[string]string{"error": "could not find the config for this commit"})
+		return
+	}
+
+	s.responseJSON(w, http.StatusOK, map[string]interface{}{
+		"hash":    hash,
+		"content": content,
+	})
 }
 
 var upgrader = websocket.Upgrader{

@@ -172,6 +172,29 @@ func GetCommitInfo(config model.Config, hash string) (string, string, error) {
 	return commitObj.Message, commitObj.Author.Name, nil
 }
 
+func GetComposeContent(config model.Config, hash string) (string, error) {
+	repo, err := git.PlainOpen(config.DeploymentDir)
+	if err != nil {
+		return "", err
+	}
+
+	commit, err := repo.CommitObject(plumbing.NewHash(hash))
+	if err != nil {
+		return "", fmt.Errorf("commit not found: %w", err)
+	}
+
+	tree, err := commit.Tree()
+	if err != nil {
+		return "", err
+	}
+
+	file, err := tree.File(config.ComposeFile)
+	if err != nil {
+		return "", fmt.Errorf("file %s not found in commit %s", config.ComposeFile, hash)
+	}
+	return file.Contents()
+}
+
 func Deploy(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger) error {
 	composePath := filepath.Join(config.DeploymentDir, config.ComposeFile)
 
