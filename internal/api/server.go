@@ -35,13 +35,14 @@ func NewServer(port int, store *store.Store, docker *client.Client, config model
 	mux.HandleFunc("GET /api/history", s.handleHistory)
 	mux.HandleFunc("GET /api/graph", s.handleGraph)
 
+	mux.HandleFunc("GET /api/stream/metrics", s.handleMetrics)
+	mux.HandleFunc("GET /api/stream/logs", s.handleLogs)
+
 	handler := s.enableCORS(s.logMiddleWare(mux))
 
 	s.server = &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: handler,
 	}
 	return s
 }

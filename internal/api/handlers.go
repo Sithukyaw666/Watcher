@@ -1,9 +1,13 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"path/filepath"
 
+	"github.com/gorilla/websocket"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/filters"
 	"github.com/sithukyaw666/watcher/internal/monitor"
 	"github.com/sithukyaw666/watcher/operations/controller"
 )
@@ -61,4 +65,92 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.responseJSON(w, http.StatusOK, graph)
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	targetService := r.URL.Query().Get("service")
+	if targetService == "" {
+		http.Error(w, "service parameter required", http.StatusBadRequest)
+		return
+	}
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		s.logger.Error("Upgrade failed", "error", err)
+		return
+	}
+	defer c.Close()
+
+	projectName := filepath.Base(s.config.DeploymentDir)
+	containers, _ := s.docker.ContainerList(r.Context(), container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "com.docker.compose.project="+projectName)),
+	})
+
+	statsCh := make(chan monitor.ContainerMetrics)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	for _, container := range containers {
+		svcName := container.Labels["com.docker.compose.service"]
+		if svcName == targetService && container.State == "running" {
+			go monitor.StreamStats(ctx, s.docker, container.ID, svcName, statsCh, s.logger)
+		}
+	}
+
+	for {
+		select {
+		case metrics := <-statsCh:
+			if err := c.WriteJSON(metrics); err != nil {
+				return
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+
+}
+
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	targetService := r.URL.Query().Get("service")
+	if targetService == "" {
+		http.Error(w, "service parameter required", http.StatusBadRequest)
+		return
+	}
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer c.Close()
+
+	projectName := filepath.Base(s.config.DeploymentDir)
+	containers, _ := s.docker.ContainerList(r.Context(), container.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", "com.docker.compose.project="+projectName)),
+	})
+
+	logCh := make(chan monitor.LogMessage)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	for _, container := range containers {
+		svcName := container.Labels["com.docker.compose.service"]
+		if svcName == targetService {
+			go monitor.StreamLogs(ctx, s.docker, container.ID, svcName, logCh, s.logger)
+		}
+	}
+
+	for {
+		select {
+		case logs := <-logCh:
+			if err := c.WriteJSON(logs); err != nil {
+				return
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
