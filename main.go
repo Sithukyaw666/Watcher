@@ -96,7 +96,7 @@ func main() {
 	}()
 
 	logger.Info("Performing initial reconciliation check...")
-	runCycle(ctx, cli, config, logger, s) // Pass logger
+	runCycle(ctx, cli, config, logger, s, apiServer) // Pass logger
 
 	for {
 		select {
@@ -106,13 +106,19 @@ func main() {
 			return
 		case <-time.After(time.Duration(config.CheckInterval) * time.Second):
 			logger.Info("Running periodic reconciliation check...")
-			runCycle(ctx, cli, config, logger, s) // Pass logger
+			runCycle(ctx, cli, config, logger, s, apiServer) // Pass logger
 		}
 	}
 
 }
 
-func runCycle(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger, s *store.Store) {
+func runCycle(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger, s *store.Store, apiServer *api.Server) {
+
+	apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+		"state":     "syncing_git",
+		"message":   "Syncing repository...",
+		"timestamp": time.Now(),
+	})
 	update, err := operations.CloneOrFetchRepo(config, logger) // Pass logger
 	if err != nil {
 		logger.Error("ERROR during git operation", "error", err)
@@ -130,14 +136,28 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 		return
 	}
 
+	driftMessage := "Checking for configuration drift..."
+
 	if update != nil {
+		driftMessage = "New commit detected. Applying changes..."
 		logger.Info("Changed detected, starting deployment...")
 	} else {
 		logger.Info("No repository changes detected. But ensuring services are reconciled.")
 	}
 
+	apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+		"state":     "reconciling",
+		"message":   driftMessage,
+		"timestamp": time.Now(),
+	})
+
 	if err := operations.Deploy(ctx, cli, config, logger); err != nil { // Pass logger
 		logger.Error("Deployment FAILED", "hash", currentHash, "error", err)
+		apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+			"state":     "deployment_failed",
+			"message":   "Deployment failed for new commit and saving the state",
+			"timestamp": time.Now(),
+		})
 
 		s.AddDeployment(store.Deployment{
 			ID:            time.Now().Format(time.RFC3339Nano),
@@ -149,6 +169,12 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 		})
 
 		logger.Info("Initiating automatic rollback...")
+
+		apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+			"state":     "rolling_back",
+			"message":   "Initiating automatic rollback...",
+			"timestamp": time.Now(),
+		})
 
 		lastSuccess, err := s.GetLastSuccessfulDeployment()
 		if err != nil {
@@ -169,13 +195,31 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 
 		if err := operations.Deploy(ctx, cli, config, logger); err != nil {
 			logger.Error("Rollback Failed: Could not re-deploy old state", "error", err)
+
+			apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+				"state":     "rollback_error",
+				"message":   "Rollback failed. Could not re-deploy old state",
+				"timestamp": time.Now(),
+			})
 			return
 		} else {
+			apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+				"state":     "rollback_success",
+				"message":   "Rollback Successful. Re-deployed to the previous healthy state",
+				"timestamp": time.Now(),
+			})
+
 			logger.Info("Rollback Successful: Re-deployed to the previous healthy state.")
 		}
 	}
 	logger.Info("Deployment Successful", "hash", currentHash)
 	if update != nil {
+
+		apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+			"state":     "saving_new_state",
+			"message":   "Saving new healthy state...",
+			"timestamp": time.Now(),
+		})
 		logger.Info("New Deployment: Saving to state db...")
 		s.AddDeployment(store.Deployment{
 			ID:            time.Now().Format(time.RFC3339Nano),
@@ -186,4 +230,11 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 			CommitAuthor:  commitAuthor,
 		})
 	}
+	apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
+		"state":     "idle",
+		"message":   "System Healthy. Waiting for next cycle.",
+		"timestamp": time.Now(),
+		"next_run":  time.Now().Add(time.Duration(config.CheckInterval) * time.Second),
+	})
+
 }

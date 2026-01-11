@@ -8,31 +8,41 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/moby/moby/client"
 	"github.com/sithukyaw666/watcher/internal/store"
 	"github.com/sithukyaw666/watcher/model"
 )
 
 type Server struct {
-	store  *store.Store
-	docker *client.Client
-	config model.Config
-	logger *slog.Logger
-	server *http.Server
-	uiFS   fs.FS
+	store     *store.Store
+	docker    *client.Client
+	config    model.Config
+	logger    *slog.Logger
+	server    *http.Server
+	uiFS      fs.FS
+	clients   map[*websocket.Conn]bool
+	clientsMu sync.Mutex
+}
+
+type SystemEvent struct {
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload"`
 }
 
 func NewServer(port int, store *store.Store, docker *client.Client, config model.Config, logger *slog.Logger, uiFS fs.FS) *Server {
 	mux := http.NewServeMux()
 
 	s := &Server{
-		store:  store,
-		docker: docker,
-		config: config,
-		logger: logger,
-		uiFS:   uiFS,
+		store:   store,
+		docker:  docker,
+		config:  config,
+		logger:  logger,
+		uiFS:    uiFS,
+		clients: make(map[*websocket.Conn]bool),
 	}
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
@@ -42,6 +52,7 @@ func NewServer(port int, store *store.Store, docker *client.Client, config model
 
 	mux.HandleFunc("GET /api/stream/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/stream/logs", s.handleLogs)
+	mux.HandleFunc("GET /api/system/events", s.handleSystemEvents)
 
 	mux.Handle("/", s.enableCORS(s.logMiddleWare(s.spaHandler())))
 	s.server = &http.Server{
@@ -83,6 +94,23 @@ func (s *Server) logMiddleWare(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		s.logger.Debug("API Request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
 	})
+}
+func (s *Server) BroadCast(eventType string, payload interface{}) {
+	event := SystemEvent{
+		Type:    eventType,
+		Payload: payload,
+	}
+
+	s.clientsMu.Lock()
+	defer s.clientsMu.Unlock()
+
+	for client := range s.clients {
+		err := client.WriteJSON(event)
+		if err != nil {
+			client.Close()
+			delete(s.clients, client)
+		}
+	}
 }
 
 func (s *Server) spaHandler() http.HandlerFunc {

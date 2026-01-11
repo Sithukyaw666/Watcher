@@ -17,6 +17,29 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.responseJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleSystemEvents(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+
+	s.clientsMu.Lock()
+	s.clients[c] = true
+	s.clientsMu.Unlock()
+
+	defer func() {
+		s.clientsMu.Lock()
+		delete(s.clients, c)
+		s.clientsMu.Unlock()
+	}()
+
+	for {
+		if _, _, err := c.NextReader(); err != nil {
+			break
+		}
+	}
+}
+
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	deployments, err := s.store.GetAllDeployments()
 	if err != nil {
