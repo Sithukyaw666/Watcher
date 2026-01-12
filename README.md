@@ -80,7 +80,7 @@ For advanced integration, Watcher exposes a clean REST and WebSocket API.
 
 ## Configuration
 
-Watcher is configured via a `config.yaml` file.
+Watcher is configured via a `config.yaml` file mounted into the container.
 
 ### `config.yaml` Parameters
 
@@ -89,4 +89,85 @@ Watcher is configured via a `config.yaml` file.
 - `composeFile` (string): Name of the target file (e.g., `docker-compose.yaml`).
 - `targetBranch` (string): Branch to monitor (e.g., `main`).
 - `checkInterval` (integer): Seconds between checks (e.g., `30`).
-- `sshKeyPath` (string, optional): Path to the SSH private key for Git auth.
+- `dbPath` (string): Path to the BoltDB state file (e.g., `/etc/watcher/watcher.db`).
+- `sshKeyPath` (string, optional): Path to the SSH private key (if not using SSH Agent).
+
+## Git Authentication
+
+Watcher supports two methods for authenticating with your Git repository. To prevent Man-in-the-Middle attacks, Watcher strictly verifies the Git server's identity using a `known_hosts` file.
+
+### 1. SSH Agent (Recommended)
+
+This is the **safest method** as it avoids mounting private key files directly. Watcher automatically detects the `SSH_AUTH_SOCK` environment variable.
+
+**Setup Instructions:**
+
+1. Ensure your SSH agent is running and your key is added:
+   ```bash
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_rsa
+   ```
+
+### 2. Private Key File
+
+If you cannot use an SSH Agent, you can mount a private key file and specify `sshKeyPath` in `config.yaml`.
+
+```yaml
+# config.yaml
+sshKeyPath: /home/appuser/.ssh/id_rsa
+```
+
+## Running with Docker
+
+Watcher is designed to run as a container alongside your workloads. It requires access to the Docker socket and your SSH credentials.
+
+### Prerequisites
+
+1.  **Git Authentication**: Complete the [SSH Agent Setup](#1-ssh-agent-recommended)
+2.  Generate a `known_hosts` file for your Git provider:
+
+    ```bash
+    ssh-keyscan github.com > known_hosts
+    ```
+
+3.  **Config File**: Create a `config.yaml` (see parameters above).
+
+### Docker Compose Example
+
+```yaml
+services:
+  watcher:
+    image: sithukyaw666/watcher:latest
+    container_name: watcher
+    restart: unless-stopped
+    environment:
+      # Forward SSH Agent for authentication
+      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+      # Tell Watcher where to find the known_hosts file
+      - SSH_KNOWN_HOSTS=/home/appuser/.ssh/known_hosts
+    volumes:
+      # 1. Docker Socket: Required to manage containers
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # 2. Configuration: Mount your config file
+      - ./config.yaml:/home/appuser/config.yaml:ro
+
+      # 3. SSH Authentication: Forward the host's SSH Agent
+      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
+
+      # 4. SSH Security: Mount the known_hosts file generated above
+      - ./known_hosts:/home/appuser/.ssh/known_hosts:ro
+
+      # 5. Persistence: Persist the state database (History & Rollbacks)
+      - watcher_data:/etc/watcher/
+
+      # 6. Deployment Directory: Where the repo is cloned
+      # Ensure this path matches 'deploymentDir' in your config.yaml
+      - ./deployment:/app/deployment
+
+    ports:
+      - "8080:8080" # Access Dashboard
+
+volumes:
+  watcher_data:
+```

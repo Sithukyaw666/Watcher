@@ -1,15 +1,21 @@
 services:
   watcher:
-    image: sithukyaw666/watcher:v0.0.1
+    image: watcher:v0.1.0
     container_name: my-watcher
-    user: "1000:988" # user id and docker group id
     restart: unless-stopped
     environment:
-      - SSH_KNOWN_HOSTS=/home/appuser/.ssh/known_hosts
       - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+      - SSH_KNOWN_HOSTS=/home/appuser/.ssh/known_hosts
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yaml:/home/appuser/config.yaml:ro
       - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
-      - ${HOME}/.ssh/id_rsa:/home/appuser/.ssh/id_rsa:ro
-      - ${HOME}/deployment:/home/appuser/deployment
+      - ${HOME}/test/cd:/home/stk/test/cd
+      - ./known_hosts:/home/appuser/.ssh/known_hosts
+      - state_volume:/etc/watcher/
+    ports:
+      - "8080:8080"
+
+volumes:
+  state_volume:
+
