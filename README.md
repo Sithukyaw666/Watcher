@@ -6,6 +6,22 @@
 
 Unlike traditional scripts, Watcher provides a full **Observability Suite** and a **Bulletproof Rollback System**, ensuring your applications stay healthy even when bad code is pushed.
 
+## Motivation
+
+While using Docker Compose in production, we wanted a tag-based container release workflow—every new image tag should trigger a deployment.
+
+We explored tools like **Watchtower**, but found it wasn't truly GitOps-oriented. It focuses on tracking image digests/updates rather than managing the entire deployment lifecycle via version control, making it unsuitable for strict tag-driven release flows.
+
+Our initial solution was to deploy via CI by copying `docker-compose` files to the server over SSH and running `docker compose up` manually. This approach quickly revealed significant limitations:
+
+*   **Security Risk**: Deployment servers had to be exposed (via SSH) to CI runners.
+*   **Secrets Management**: Private SSH keys had to be stored in CI variables.
+*   **Operational Burden**: Running self-hosted runners or CI agents on deployment servers wasted resources and added maintenance overhead.
+
+**A deployment server should focus on running applications, not executing CI jobs.**
+
+These challenges led to the creation of **Watcher**: a pull-based GitOps controller that runs *inside* your environment, eliminating the need for incoming SSH connections or external CI agents.
+
 ## Core Features
 
 - **Native Go Implementation**: Direct interaction with Docker Engine API for precise control.
