@@ -33,6 +33,7 @@ For advanced integration, Watcher exposes a clean REST and WebSocket API.
 | Endpoint | Type | Purpose |
 | :--- | :--- | :--- |
 | `GET /api/history` | REST | List of past deployments and statuses. |
+| `GET /api/current-deployment` | REST | Returns the last successful (stable) deployment. |
 | `GET /api/history/view?hash=...` | REST | View the exact YAML config for a specific commit. |
 | `GET /api/graph` | REST | Current service status and dependency mapping. |
 | `WS /api/stream/metrics?service=...` | WS | Real-time CPU/Mem metrics stream. |

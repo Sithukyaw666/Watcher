@@ -40,6 +40,16 @@ func (s *Server) handleSystemEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleCurrentDeployment(w http.ResponseWriter, r *http.Request) {
+	lastSuccess, err := s.store.GetLastSuccessfulDeployment()
+	if err != nil {
+		s.logger.Warn("Failed to fetch last successful deployment", "error", err)
+		s.responseJSON(w, http.StatusNotFound, map[string]string{"error": "no active deployment found"})
+		return
+	}
+	s.responseJSON(w, http.StatusOK, lastSuccess)
+}
+
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	deployments, err := s.store.GetAllDeployments()
 	if err != nil {

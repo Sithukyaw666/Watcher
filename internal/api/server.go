@@ -48,6 +48,7 @@ func NewServer(port int, store *store.Store, docker *client.Client, config model
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/history", s.handleHistory)
 	mux.HandleFunc("GET /api/graph", s.handleGraph)
+	mux.HandleFunc("GET /api/current_deployment", s.handleCurrentDeployment)
 	mux.HandleFunc("GET /api/history/view", s.handleHistoryView)
 
 	mux.HandleFunc("GET /api/stream/metrics", s.handleMetrics)
