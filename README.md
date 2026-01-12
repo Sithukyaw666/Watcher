@@ -14,13 +14,35 @@ We explored tools like **Watchtower**, but found it wasn't truly GitOps-oriented
 
 Our initial solution was to deploy via CI by copying `docker-compose` files to the server over SSH and running `docker compose up` manually. This approach quickly revealed significant limitations:
 
-*   **Security Risk**: Deployment servers had to be exposed (via SSH) to CI runners.
-*   **Secrets Management**: Private SSH keys had to be stored in CI variables.
-*   **Operational Burden**: Running self-hosted runners or CI agents on deployment servers wasted resources and added maintenance overhead.
+- **Security Risk**: Deployment servers had to be exposed (via SSH) to CI runners.
+- **Secrets Management**: Private SSH keys had to be stored in CI variables.
+- **Operational Burden**: Running self-hosted runners or CI agents on deployment servers wasted resources and added maintenance overhead.
 
 **A deployment server should focus on running applications, not executing CI jobs.**
 
-These challenges led to the creation of **Watcher**: a pull-based GitOps controller that runs *inside* your environment, eliminating the need for incoming SSH connections or external CI agents.
+These challenges led to the creation of **Watcher**: a pull-based GitOps controller that runs _inside_ your environment, eliminating the need for incoming SSH connections or external CI agents.
+
+## Screenshots
+
+### Main Dashboard
+
+Interactive visualization of your services and their dependencies, with real-time status indicators.
+![Main Dashboard](assets/homepage.png)
+
+### Real-Time Metrics
+
+Live resource consumption monitoring for CPU and Memory usage.
+![Container Metrics](assets/container_metrics.png)
+
+### Live Log Streaming
+
+Streaming `stdout` and `stderr` directly to the browser for effortless debugging.
+![Container Logs](assets/container_log.png)
+
+### Deployment Audit
+
+Full history of every reconciliation cycle, including commit info and configuration snapshots.
+![Deployment Snapshot](assets/deployment_snapshot.png)
 
 ## Core Features
 
@@ -46,15 +68,15 @@ Watcher serves a modern, dark-mode dashboard at `http://localhost:8080` (default
 
 For advanced integration, Watcher exposes a clean REST and WebSocket API.
 
-| Endpoint | Type | Purpose |
-| :--- | :--- | :--- |
-| `GET /api/history` | REST | List of past deployments and statuses. |
-| `GET /api/current_deployment` | REST | Returns the last successful (stable) deployment. |
-| `GET /api/history/view?hash=...` | REST | View the exact YAML config for a specific commit. |
-| `GET /api/graph` | REST | Current service status and dependency mapping. |
-| `WS /api/stream/metrics?service=...` | WS | Real-time CPU/Mem metrics stream. |
-| `WS /api/stream/logs?service=...` | WS | Live tail -f of container logs. |
-| `WS /api/system/events` | WS | Real-time pulse of the GitOps engine. |
+| Endpoint                             | Type | Purpose                                           |
+| :----------------------------------- | :--- | :------------------------------------------------ |
+| `GET /api/history`                   | REST | List of past deployments and statuses.            |
+| `GET /api/current_deployment`        | REST | Returns the last successful (stable) deployment.  |
+| `GET /api/history/view?hash=...`     | REST | View the exact YAML config for a specific commit. |
+| `GET /api/graph`                     | REST | Current service status and dependency mapping.    |
+| `WS /api/stream/metrics?service=...` | WS   | Real-time CPU/Mem metrics stream.                 |
+| `WS /api/stream/logs?service=...`    | WS   | Live tail -f of container logs.                   |
+| `WS /api/system/events`              | WS   | Real-time pulse of the GitOps engine.             |
 
 ## Configuration
 
@@ -68,13 +90,3 @@ Watcher is configured via a `config.yaml` file.
 - `targetBranch` (string): Branch to monitor (e.g., `main`).
 - `checkInterval` (integer): Seconds between checks (e.g., `30`).
 - `sshKeyPath` (string, optional): Path to the SSH private key for Git auth.
-
-## Authentication
-
-Watcher supports two methods for authenticating with your Git repository and will prioritize the SSH Agent if it is available.
-
-### 1. SSH Agent (Recommended & Safer)
-Watcher automatically detects the `SSH_AUTH_SOCK` environment variable inside the container. If found, it will attempt to authenticate using the forwarded SSH agent. This is the **most secure method** as it avoids mounting private key files into the container.
-
-### 2. Private Key File
-If an SSH agent is not detected or if agent authentication fails, Watcher will use the private key specified by the `sshKeyPath` parameter in the `config.yaml` file. Ensure this file has restrictive permissions (e.g., `0600`).
