@@ -89,7 +89,7 @@ Watcher is configured via a `config.yaml` file mounted into the container.
 - `composeFile` (string): Name of the target file (e.g., `docker-compose.yaml`).
 - `targetBranch` (string): Branch to monitor (e.g., `main`).
 - `checkInterval` (integer): Seconds between checks (e.g., `30`).
-- `dbPath` (string): Path to the BoltDB state file (e.g., `/etc/watcher/watcher.db`).
+- `stateLocation` (string): Directory path for the BoltDB state file (e.g., `/etc/watcher`). Watcher will create `watcher.db` inside this directory.
 - `sshKeyPath` (string, optional): Path to the SSH private key (if not using SSH Agent).
 
 ## Git Authentication
