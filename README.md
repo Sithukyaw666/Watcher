@@ -49,7 +49,7 @@ For advanced integration, Watcher exposes a clean REST and WebSocket API.
 | Endpoint | Type | Purpose |
 | :--- | :--- | :--- |
 | `GET /api/history` | REST | List of past deployments and statuses. |
-| `GET /api/current-deployment` | REST | Returns the last successful (stable) deployment. |
+| `GET /api/current_deployment` | REST | Returns the last successful (stable) deployment. |
 | `GET /api/history/view?hash=...` | REST | View the exact YAML config for a specific commit. |
 | `GET /api/graph` | REST | Current service status and dependency mapping. |
 | `WS /api/stream/metrics?service=...` | WS | Real-time CPU/Mem metrics stream. |
@@ -78,33 +78,3 @@ Watcher automatically detects the `SSH_AUTH_SOCK` environment variable inside th
 
 ### 2. Private Key File
 If an SSH agent is not detected or if agent authentication fails, Watcher will use the private key specified by the `sshKeyPath` parameter in the `config.yaml` file. Ensure this file has restrictive permissions (e.g., `0600`).
-
-## Running with Docker
-
-Watcher is distributed as a single container. It requires access to the Docker socket to manage your services.
-
-**`docker-compose.yaml` Example:**
-
-```yaml
-services:
-  watcher:
-    image: sithukyaw666/watcher:latest
-    container_name: watcher-cd
-    user: "1000:988" # user id and docker group id
-    ports:
-      - "8080:8080"  # Access the Dashboard here
-    environment:
-      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./config.yaml:/home/appuser/config.yaml:ro
-      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
-      - ${HOME}/deployment:/home/appuser/deployment
-    restart: unless-stopped
-```
-
-## Resilience & Rollbacks
-
-1.  **Detection**: If `docker compose up` (Apply) fails or a service becomes `unhealthy`, Watcher marks that commit as `FAILED` in its internal BoltDB.
-2.  **Recovery**: It automatically checks out the last `SUCCESS` commit from Git and re-deploys it.
-3.  **Circuit Breaking**: If the remote repository still contains the `FAILED` commit, Watcher will skip the update and remain on the safe version until a newer commit is detected.
