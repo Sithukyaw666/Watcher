@@ -80,7 +80,7 @@ For advanced integration, Watcher exposes a clean REST and WebSocket API.
 
 ## Configuration
 
-Watcher is configured via a `config.yaml` file mounted into the container.
+Watcher is configured via a `config.yaml` file.
 
 ### `config.yaml` Parameters
 
