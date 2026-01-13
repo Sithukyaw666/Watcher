@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -74,7 +75,16 @@ func main() {
 	}
 	defer cli.Close()
 
-	s, err := store.NewStore("watcher.db")
+	var dbPath string
+	if config.StateLocation != "" {
+		dbPath = fmt.Sprintf("%s/watcher.db", config.StateLocation)
+		logger.Info("Using user defined stateLocation...", "location", dbPath)
+	} else {
+		dbPath = "watcher.db"
+		logger.Warn("StateLocation is undefined. Using default location", "path", dbPath)
+	}
+
+	s, err := store.NewStore(dbPath)
 	if err != nil {
 		logger.Error("Failed to initiate store", "error", err)
 		os.Exit(1)

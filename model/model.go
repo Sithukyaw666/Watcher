@@ -10,6 +10,7 @@ type Config struct {
 	ComposeFile      string
 	TargetBranch     string
 	SSHKeyPath       string
+	StateLocation    string
 	CheckInterval    int
 	DockerAPIVersion string
 }
