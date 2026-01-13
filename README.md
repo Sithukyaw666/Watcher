@@ -2,13 +2,13 @@
 
 ## Overview
 
-**Watcher** is a lightweight, production-grade GitOps tool that automates and observes deployments for Docker Compose environments. It monitors a Git repository for changes and intelligently reconciles the desired state directly with the Docker Engine API.
+**Watcher** is a lightweight, GitOps tool that automates and observes deployments for Docker Compose environments. It monitors a Git repository for changes and intelligently reconciles the desired state directly with the Docker Engine API.
 
 Unlike traditional scripts, Watcher provides a full **Observability Suite** and a **Bulletproof Rollback System**, ensuring your applications stay healthy even when bad code is pushed.
 
 ## Motivation
 
-While using Docker Compose in production, we wanted a tag-based container release workflow—every new image tag should trigger a deployment.
+While using Docker Compose, we wanted a tag-based container release workflow—every new image tag should trigger a deployment.
 
 We explored tools like **Watchtower**, but found it wasn't truly GitOps-oriented. It focuses on tracking image digests/updates rather than managing the entire deployment lifecycle via version control, making it unsuitable for strict tag-driven release flows.
 
