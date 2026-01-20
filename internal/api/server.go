@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/moby/moby/client"
 	"github.com/sithukyaw666/watcher/internal/store"
 	"github.com/sithukyaw666/watcher/model"
@@ -24,7 +23,7 @@ type Server struct {
 	logger    *slog.Logger
 	server    *http.Server
 	uiFS      fs.FS
-	clients   map[*websocket.Conn]bool
+	clients   map[chan SystemEvent]bool
 	clientsMu sync.Mutex
 }
 
@@ -42,7 +41,7 @@ func NewServer(port int, store *store.Store, docker *client.Client, config model
 		config:  config,
 		logger:  logger,
 		uiFS:    uiFS,
-		clients: make(map[*websocket.Conn]bool),
+		clients: make(map[chan SystemEvent]bool),
 	}
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
@@ -105,12 +104,12 @@ func (s *Server) BroadCast(eventType string, payload interface{}) {
 	s.clientsMu.Lock()
 	defer s.clientsMu.Unlock()
 
-	for client := range s.clients {
-		err := client.WriteJSON(event)
-		if err != nil {
-			client.Close()
-			delete(s.clients, client)
+	for clientChan := range s.clients {
+		select {
+		case clientChan <- event:
+		default:
 		}
+
 	}
 }
 

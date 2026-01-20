@@ -2,10 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 
-	"github.com/gorilla/websocket"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/filters"
 	"github.com/sithukyaw666/watcher/internal/monitor"
@@ -13,29 +14,51 @@ import (
 	"github.com/sithukyaw666/watcher/operations/controller"
 )
 
+func setSSEHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.responseJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleSystemEvents(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
+	setSSEHeaders(w)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
+	msgChan := make(chan SystemEvent, 10)
+
 	s.clientsMu.Lock()
-	s.clients[c] = true
+	s.clients[msgChan] = true
 	s.clientsMu.Unlock()
 
 	defer func() {
 		s.clientsMu.Lock()
-		delete(s.clients, c)
+		delete(s.clients, msgChan)
 		s.clientsMu.Unlock()
+		close(msgChan)
 	}()
 
+	ctx := r.Context()
+
 	for {
-		if _, _, err := c.NextReader(); err != nil {
-			break
+		select {
+		case event := <-msgChan:
+			data, err := json.Marshal(event)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -124,25 +147,19 @@ func (s *Server) handleHistoryView(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	targetService := r.URL.Query().Get("service")
 	if targetService == "" {
 		http.Error(w, "service parameter required", http.StatusBadRequest)
 		return
 	}
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		s.logger.Error("Upgrade failed", "error", err)
+
+	setSSEHeaders(w)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	defer c.Close()
-
 	projectName := filepath.Base(s.config.DeploymentDir)
 	containers, _ := s.docker.ContainerList(r.Context(), container.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", "com.docker.compose.project="+projectName)),
@@ -162,9 +179,12 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case metrics := <-statsCh:
-			if err := c.WriteJSON(metrics); err != nil {
-				return
+			data, err := json.Marshal(metrics)
+			if err != nil {
+				continue
 			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
 		case <-ctx.Done():
 			return
 		}
@@ -178,11 +198,12 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "service parameter required", http.StatusBadRequest)
 		return
 	}
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return
+
+	setSSEHeaders(w)
+	flush, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 	}
-	defer c.Close()
 
 	projectName := filepath.Base(s.config.DeploymentDir)
 	containers, _ := s.docker.ContainerList(r.Context(), container.ListOptions{
@@ -203,9 +224,12 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case logs := <-logCh:
-			if err := c.WriteJSON(logs); err != nil {
-				return
+			data, err := json.Marshal(logs)
+			if err != nil {
+				continue
 			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flush.Flush()
 		case <-ctx.Done():
 			return
 		}
