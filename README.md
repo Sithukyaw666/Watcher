@@ -50,8 +50,8 @@ Full history of every reconciliation cycle, including commit info and configurat
 - **Automatic Rollbacks**: Self-healing mechanism that automatically reverts to the last stable state if a new deployment fails or is unhealthy.
 - **Commit Circuit Breaker**: Intelligent logic that identifies previously failed commits and skips them, preventing infinite "Failure-Rollback-Update" loops.
 - **Interactive Web Dashboard**: Built-in UI (embedded in the binary) to visualize service dependencies, deployment history, and system status.
-- **Real-Time Monitoring**: WebSocket-powered live CPU and Memory metrics for every container.
-- **Live Logging**: Integrated terminal view for streaming `stdout` and `stderr` directly in the browser.
+- **Real-Time Monitoring**: SSE-powered live CPU and Memory metrics for every container.
+- **Live Logging**: Integrated terminal view for streaming `stdout` and `stderr` directly in the browser using Server-Sent Events.
 - **Dependency-Aware**: Respects `depends_on` and waits for `healthcheck` pass before proceeding with dependent services.
 - **Single Binary**: The entire application, including the Frontend, is compiled into a single executable.
 
@@ -64,19 +64,19 @@ Watcher serves a modern, dark-mode dashboard at `http://localhost:8080` (default
 - **Inspector**: Click any service to view live resource usage charts and real-time logs.
 - **System Pulse**: Live status bar showing the current state of the reconciliation loop (Syncing, Reconciling, Idle).
 
-## API & WebSockets
+## API & Real-time Streams
 
-For advanced integration, Watcher exposes a clean REST and WebSocket API.
+For advanced integration, Watcher exposes a clean REST and SSE API.
 
-| Endpoint                             | Type | Purpose                                           |
-| :----------------------------------- | :--- | :------------------------------------------------ |
-| `GET /api/history`                   | REST | List of past deployments and statuses.            |
-| `GET /api/current_deployment`        | REST | Returns the last successful (stable) deployment.  |
-| `GET /api/history/view?hash=...`     | REST | View the exact YAML config for a specific commit. |
-| `GET /api/graph`                     | REST | Current service status and dependency mapping.    |
-| `WS /api/stream/metrics?service=...` | WS   | Real-time CPU/Mem metrics stream.                 |
-| `WS /api/stream/logs?service=...`    | WS   | Live tail -f of container logs.                   |
-| `WS /api/system/events`              | WS   | Real-time pulse of the GitOps engine.             |
+| Endpoint                              | Type | Purpose                                           |
+| :------------------------------------ | :--- | :------------------------------------------------ |
+| `GET /api/history`                    | REST | List of past deployments and statuses.            |
+| `GET /api/current_deployment`         | REST | Returns the last successful (stable) deployment.  |
+| `GET /api/history/view?hash=...`      | REST | View the exact YAML config for a specific commit. |
+| `GET /api/graph`                      | REST | Current service status and dependency mapping.    |
+| `GET /api/stream/metrics?service=...` | SSE  | Real-time CPU/Mem metrics stream.                 |
+| `GET /api/stream/logs?service=...`    | SSE  | Live tail -f of container logs.                   |
+| `GET /api/system/events`               | SSE  | Real-time pulse of the GitOps engine.             |
 
 ## Configuration
 
