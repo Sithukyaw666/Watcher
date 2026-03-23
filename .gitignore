@@ -27,6 +27,16 @@ go.work.sum
 # env file
 .env
 
+# Python virtualenv
+.venv/
+
+# MkDocs build output
+site/
+
+# GPG keys
+*.asc
+*.gpg
+
 # Editor/IDE
 # .idea/
 # .vscode/

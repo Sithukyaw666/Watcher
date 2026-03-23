@@ -1,0 +1,43 @@
+site_name: Watcher
+site_description: Native Docker Compose GitOps Engine — lightweight, pull-based, self-healing.
+site_url: https://sithukyaw666.github.io/Watcher
+repo_url: https://github.com/Sithukyaw666/Watcher
+repo_name: Sithukyaw666/Watcher
+edit_uri: edit/main/docs/
+
+theme:
+  name: shadcn
+  icon: assets/watcher-logo.png
+  favicon: assets/watcher-logo.png
+  show_title: true
+  show_stargazers: true
+  topbar_sections: true
+  show_datetime: false
+  pygments_style:
+    light: shadcn-light
+    dark: github-dark
+
+extra_css:
+  - stylesheets/theme.css
+
+plugins:
+  - search
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - footnotes
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.saneheaders
+  - pymdownx.superfences
+
+nav:
+  - Overview: index.md
+  - Getting Started: getting-started.md
+  - API: api.md
+  - Architecture: architecture.md
+
+extra:
+  generator: false

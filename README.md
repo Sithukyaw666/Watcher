@@ -137,7 +137,7 @@ Watcher is designed to run as a container alongside your workloads. It requires 
 ```yaml
 services:
   watcher:
-    image: sithukyaw666/watcher:latest
+    image: sithukyaw666/watcher:0.1.1
     container_name: watcher
     restart: unless-stopped
     environment:
