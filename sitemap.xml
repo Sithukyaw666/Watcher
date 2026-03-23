@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://sithukyaw666.github.io/Watcher/</loc>
+         <loc>https://watcher.sithukyaw.me/</loc>
          <lastmod>2026-03-23</lastmod>
     </url>
     <url>
-         <loc>https://sithukyaw666.github.io/Watcher/api/</loc>
+         <loc>https://watcher.sithukyaw.me/api/</loc>
          <lastmod>2026-03-23</lastmod>
     </url>
     <url>
-         <loc>https://sithukyaw666.github.io/Watcher/architecture/</loc>
+         <loc>https://watcher.sithukyaw.me/architecture/</loc>
          <lastmod>2026-03-23</lastmod>
     </url>
     <url>
-         <loc>https://sithukyaw666.github.io/Watcher/getting-started/</loc>
+         <loc>https://watcher.sithukyaw.me/getting-started/</loc>
          <lastmod>2026-03-23</lastmod>
     </url>
 </urlset>
