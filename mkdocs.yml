@@ -31,7 +31,10 @@ markdown_extensions:
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.saneheaders
+  - pymdownx.highlight:
+      css_class: codehilite
   - pymdownx.superfences
+  - codehilite
 
 nav:
   - Overview: index.md
