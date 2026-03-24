@@ -86,6 +86,16 @@
     <link href="../css/geist.css" rel="stylesheet">
 
     
+    
+
+<link id="pygments-light" rel="stylesheet"
+    href="../css/pygments/shadcn-light.css">
+<link id="pygments-dark" rel="stylesheet"
+    href="../css/pygments/github-dark.css"
+    media="(prefers-color-scheme: dark)">
+
+
+    
     <link href="../stylesheets/theme.css" rel="stylesheet">
 
     
@@ -445,11 +455,11 @@
 <li>SSH access to your Git repository</li>
 <li>A <code>known_hosts</code> file for your Git provider</li>
 </ul>
-<pre class="highlight"><code class="language-bash">ssh-keyscan github.com &gt; known_hosts</code></pre>
+<pre class="codehilite"><code class="language-bash">ssh-keyscan github.com &gt; known_hosts</code></pre>
 <hr />
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p>Watcher reads from a <code>config.yaml</code> file:</p>
-<pre class="highlight"><code class="language-yaml">repoURL: git@github.com:your-org/your-repo.git
+<pre class="codehilite"><code class="language-yaml">repoURL: git@github.com:your-org/your-repo.git
 deploymentDir: /app/deployment
 composeFile: docker-compose.yaml
 targetBranch: main
@@ -524,21 +534,21 @@ sshKeyPath: /home/appuser/.ssh/id_rsa</code></pre>
 <h2 id="authentication">Authentication<a class="headerlink" href="#authentication" title="Permanent link">&para;</a></h2>
 <p>Watcher authenticates over SSH and verifies the server's host key using <code>known_hosts</code>.</p>
 <h3 id="ssh-agent-recommended">SSH Agent (Recommended)<a class="headerlink" href="#ssh-agent-recommended" title="Permanent link">&para;</a></h3>
-<pre class="highlight"><code class="language-bash">eval "$(ssh-agent -s)"
+<pre class="codehilite"><code class="language-bash">eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_rsa</code></pre>
 <p>Then wire it into the Compose file:</p>
-<pre class="highlight"><code class="language-yaml">environment:
+<pre class="codehilite"><code class="language-yaml">environment:
   - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
 volumes:
   - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}</code></pre>
 <h3 id="private-key-file">Private Key File<a class="headerlink" href="#private-key-file" title="Permanent link">&para;</a></h3>
 <p>Mount the key and set <code>sshKeyPath</code> in <code>config.yaml</code>:</p>
-<pre class="highlight"><code class="language-yaml">volumes:
+<pre class="codehilite"><code class="language-yaml">volumes:
   - /path/to/id_rsa:/home/appuser/.ssh/id_rsa:ro</code></pre>
-<pre class="highlight"><code class="language-yaml">sshKeyPath: /home/appuser/.ssh/id_rsa</code></pre>
+<pre class="codehilite"><code class="language-yaml">sshKeyPath: /home/appuser/.ssh/id_rsa</code></pre>
 <hr />
 <h2 id="docker-compose">Docker Compose<a class="headerlink" href="#docker-compose" title="Permanent link">&para;</a></h2>
-<pre class="highlight"><code class="language-yaml">services:
+<pre class="codehilite"><code class="language-yaml">services:
   watcher:
     image: sithukyaw666/watcher:0.1.1
     container_name: watcher
@@ -558,11 +568,11 @@ volumes:
 
 volumes:
   watcher_data:</code></pre>
-<pre class="highlight"><code class="language-bash">docker compose up -d</code></pre>
+<pre class="codehilite"><code class="language-bash">docker compose up -d</code></pre>
 <p>Dashboard available at <code>http://localhost:8080</code>.</p>
 <hr />
 <h2 id="build-from-source">Build from Source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h2>
-<pre class="highlight"><code class="language-bash">git clone https://github.com/Sithukyaw666/Watcher.git
+<pre class="codehilite"><code class="language-bash">git clone https://github.com/Sithukyaw666/Watcher.git
 cd Watcher
 go build -o watcher .
 ./watcher</code></pre>
