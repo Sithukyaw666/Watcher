@@ -2,23 +2,16 @@ package controller
 
 import (
 	"fmt"
-	"os"
-
 	"gopkg.in/yaml.v3"
 )
 
-func ParseComposeFile(filePath string) (*Compose, error) {
-	yamlFile, err := os.ReadFile(filePath)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to read compose file %s: %w", filePath, err)
-	}
+func ParseComposeContent(content string) (*Compose, error) {
 
 	var composeConfig Compose
 
-	err = yaml.Unmarshal(yamlFile, &composeConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal compose file: %w", err)
+	if err := yaml.Unmarshal([]byte(content), &composeConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal compose content: %w", err)
 	}
+
 	return &composeConfig, nil
 }

@@ -43,7 +43,7 @@ func CloneOrFetchRepo(config model.Config, logger *slog.Logger, s *store.Store) 
 	repo, err := git.PlainOpen(config.DeploymentDir)
 	if err == git.ErrRepositoryNotExists {
 		logger.Info("Repository not found, cloning...", "deployment_dir", config.DeploymentDir)
-		_, err = git.PlainClone(config.DeploymentDir, false, &git.CloneOptions{
+		_, err = git.PlainClone(config.DeploymentDir, true, &git.CloneOptions{
 			URL:  config.RepoURL,
 			Auth: auth,
 		})
@@ -106,39 +106,13 @@ func CloneOrFetchRepo(config model.Config, logger *slog.Logger, s *store.Store) 
 		return nil, nil
 	}
 
-	logger.Info("Updating repository", "old_hash", oldHash, "new_hash", newHash)
+	err = repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, newHash))
+	if err != nil {
+		return nil, fmt.Errorf("failed to update HEAD: %w", err)
+	}
 
-	w, err := repo.Worktree()
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get worktree: %w", err)
-	}
-	branchRef := plumbing.NewBranchReferenceName(config.TargetBranch)
-	err = w.Checkout(&git.CheckoutOptions{
-		Branch: branchRef,
-	})
-	if err == git.ErrBranchNotFound {
-		err = w.Checkout(&git.CheckoutOptions{
-			Hash:   newHash,
-			Branch: branchRef,
-			Create: true,
-		})
-	}
-	if err != nil {
-		return nil, fmt.Errorf("Failed to checkout branch: %w", err)
-	}
-	err = w.Reset(&git.ResetOptions{
-		Commit: newHash,
-		Mode:   git.HardReset,
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to reset the worktree: %w", err)
-	}
-	logger.Info("Update successful.")
-	return &model.RepoUpdate{
-		OldHash: oldHash,
-		NewHash: newHash,
-	}, nil
+	logger.Info("Fetch successful. ", "old_hash", oldHash, "new_hash", newHash)
+	return &model.RepoUpdate{OldHash: oldHash, NewHash: newHash}, nil
 }
 
 func GetCurrentHash(config model.Config) (string, error) {
@@ -153,20 +127,13 @@ func GetCurrentHash(config model.Config) (string, error) {
 	return head.Hash().String(), nil
 }
 
-func CheckoutHash(config model.Config, hash string, logger *slog.Logger) error {
+func SetCurrentHash(config model.Config, hash string) error {
 	repo, err := git.PlainOpen(config.DeploymentDir)
+
 	if err != nil {
 		return err
 	}
-	w, err := repo.Worktree()
-	if err != nil {
-		return err
-	}
-	logger.Info("Checking out commit", "hash", hash)
-	return w.Checkout(&git.CheckoutOptions{
-		Hash:  plumbing.NewHash(hash),
-		Force: true,
-	})
+	return repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, plumbing.NewHash(hash)))
 }
 
 func GetCommitInfo(config model.Config, hash string) (string, string, error) {
@@ -205,11 +172,13 @@ func GetComposeContent(config model.Config, hash string) (string, error) {
 	return file.Contents()
 }
 
-func Deploy(ctx context.Context, cli *client.Client, config model.Config, logger *slog.Logger) error {
-	composePath := filepath.Join(config.DeploymentDir, config.ComposeFile)
+func Deploy(ctx context.Context, cli *client.Client, config model.Config, hash string, logger *slog.Logger) error {
 
-	composeConfig, err := controller.ParseComposeFile(composePath)
-
+	content, err := GetComposeContent(config, hash)
+	if err != nil {
+		return fmt.Errorf("could not get the compose config.")
+	}
+	composeConfig, err := controller.ParseComposeContent(content)
 	if err != nil {
 		return fmt.Errorf("could not process compose file: %w", err)
 	}

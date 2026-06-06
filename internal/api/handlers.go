@@ -93,10 +93,20 @@ type GraphNode struct {
 }
 
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
-	composePath := filepath.Join(s.config.DeploymentDir, s.config.ComposeFile)
-	compose, err := controller.ParseComposeFile(composePath)
+	hash, err := operations.GetCurrentHash(s.config)
 	if err != nil {
-		s.responseJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to parse compose file"})
+		s.responseJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get the current hash"})
+		return
+	}
+	content, err := operations.GetComposeContent(s.config, hash)
+	if err != nil {
+		s.responseJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load the compose dcontent"})
+		return
+	}
+
+	compose, err := controller.ParseComposeContent(content)
+	if err != nil {
+		s.responseJSON(w, http.StatusInternalServerError, map[string]string{"error": "can't parse the compose content"})
 		return
 	}
 

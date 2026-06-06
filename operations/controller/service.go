@@ -50,7 +50,7 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 
 		if actualContainer, ok := actualState[serviceName]; ok {
 			logger.Info("Service exists. Checking for image updates...", "service_name", serviceName)
-			if err := pullImage(ctx, cli, desiredService.Image, logger); err != nil {
+			if err := pullImage(ctx, cli, desiredService.Image); err != nil {
 				logger.Warn("Could not pull image. Skipping update check.", "image", desiredService.Image, "error", err)
 				continue
 			}
@@ -125,7 +125,7 @@ func ReconcileServices(ctx context.Context, cli *client.Client, projectName stri
 func createService(ctx context.Context, cli *client.Client, projectName string, serviceName string, service *Service, logger *slog.Logger) (string, error) {
 	logger.Info("Creating service", "service_name", serviceName)
 
-	if err := pullImage(ctx, cli, service.Image, logger); err != nil {
+	if err := pullImage(ctx, cli, service.Image); err != nil {
 		return "", fmt.Errorf("failed to pull image %s: %w", service.Image, err)
 	}
 	logger.Info("Image pulled successfully.", "image", service.Image)
@@ -231,7 +231,7 @@ func createService(ctx context.Context, cli *client.Client, projectName string, 
 }
 
 // pullImage pulls the specified Docker image from the registry
-func pullImage(ctx context.Context, cli *client.Client, imageName string, logger *slog.Logger) error {
+func pullImage(ctx context.Context, cli *client.Client, imageName string) error {
 	out, err := cli.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		return err
@@ -244,7 +244,7 @@ func pullImage(ctx context.Context, cli *client.Client, imageName string, logger
 func waitForHealthCheck(ctx context.Context, cli *client.Client, containerID string, logger *slog.Logger) error {
 	logger.Info("Waiting for container to be healthy", "container_id", containerID[:12])
 
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		inspect, err := cli.ContainerInspect(ctx, containerID)
 		if err != nil {
 			return fmt.Errorf("failed to inspect container %s: %w", containerID, err)

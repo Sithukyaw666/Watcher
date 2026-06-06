@@ -161,7 +161,7 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 		"timestamp": time.Now(),
 	})
 
-	if err := operations.Deploy(ctx, cli, config, logger); err != nil { // Pass logger
+	if err := operations.Deploy(ctx, cli, config, currentHash, logger); err != nil { // Pass logger
 		logger.Error("Deployment FAILED", "hash", currentHash, "error", err)
 		apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
 			"state":     "deployment_failed",
@@ -198,12 +198,7 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 
 		logger.Info("Rolling back to last known healthy state", "hash", lastSuccess.CommitHash)
 
-		if err := operations.CheckoutHash(config, lastSuccess.CommitHash, logger); err != nil {
-			logger.Error("Rollback Failed: Could not checkout previous hash", "error", err)
-			return
-		}
-
-		if err := operations.Deploy(ctx, cli, config, logger); err != nil {
+		if err := operations.Deploy(ctx, cli, config, lastSuccess.CommitHash, logger); err != nil {
 			logger.Error("Rollback Failed: Could not re-deploy old state", "error", err)
 
 			apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
@@ -213,6 +208,7 @@ func runCycle(ctx context.Context, cli *client.Client, config model.Config, logg
 			})
 			return
 		} else {
+			operations.SetCurrentHash(config, lastSuccess.CommitHash)
 			apiServer.BroadCast("SYSTEM_STATUS", map[string]interface{}{
 				"state":     "rollback_success",
 				"message":   "Rollback Successful. Re-deployed to the previous healthy state",

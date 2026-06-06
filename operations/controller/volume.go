@@ -25,7 +25,7 @@ func ReconcileVolumes(ctx context.Context, cli *client.Client, projectName strin
 	actualVolumeMap := make(map[string]struct{})
 
 	for _, vol := range actualVolumes.Volumes {
-		actualVolumeMap[vol.Labels["com.docker.compose.project"]] = struct{}{}
+		actualVolumeMap[vol.Labels["com.docker.compose.volume"]] = struct{}{}
 	}
 
 	if len(volumes) == 0 {
