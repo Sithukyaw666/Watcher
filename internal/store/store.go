@@ -13,6 +13,7 @@ const (
 	StatusFailed     = "FAILED"
 	StatusRolledBack = "ROLLED_BACK"
 )
+const BucketName = "deployment"
 
 type Deployment struct {
 	ID            string    `json:"id"`
@@ -37,7 +38,7 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("deployment"))
+		_, err := tx.CreateBucketIfNotExists([]byte(BucketName))
 		return err
 	})
 	if err != nil {

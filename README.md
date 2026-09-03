@@ -4,8 +4,6 @@
 
 **Watcher** is a lightweight, GitOps tool that automates and observes deployments for Docker Compose environments. It monitors a Git repository for changes and intelligently reconciles the desired state directly with the Docker Engine API.
 
-Unlike traditional scripts, Watcher provides a full **Observability Suite** and a **Bulletproof Rollback System**, ensuring your applications stay healthy even when bad code is pushed.
-
 ## Motivation
 
 While using Docker Compose, we wanted a tag-based container release workflow—every new image tag should trigger a deployment.
@@ -22,61 +20,14 @@ Our initial solution was to deploy via CI by copying `docker-compose` files to t
 
 These challenges led to the creation of **Watcher**: a pull-based GitOps controller that runs _inside_ your environment, eliminating the need for incoming SSH connections or external CI agents.
 
-## Screenshots
-
-### Main Dashboard
-
-Interactive visualization of your services and their dependencies, with real-time status indicators.
-![Main Dashboard](assets/homepage.png)
-
-### Real-Time Metrics
-
-Live resource consumption monitoring for CPU and Memory usage.
-![Container Metrics](assets/container_metrics.png)
-
-### Live Log Streaming
-
-Streaming `stdout` and `stderr` directly to the browser for effortless debugging.
-![Container Logs](assets/container_log.png)
-
-### Deployment Audit
-
-Full history of every reconciliation cycle, including commit info and configuration snapshots.
-![Deployment Snapshot](assets/deployment_snapshot.png)
-
-## Core Features
-
-- **Native Go Implementation**: Direct interaction with Docker Engine API for precise control.
-- **Automatic Rollbacks**: Self-healing mechanism that automatically reverts to the last stable state if a new deployment fails or is unhealthy.
-- **Commit Circuit Breaker**: Intelligent logic that identifies previously failed commits and skips them, preventing infinite "Failure-Rollback-Update" loops.
-- **Interactive Web Dashboard**: Built-in UI (embedded in the binary) to visualize service dependencies, deployment history, and system status.
-- **Real-Time Monitoring**: SSE-powered live CPU and Memory metrics for every container.
-- **Live Logging**: Integrated terminal view for streaming `stdout` and `stderr` directly in the browser using Server-Sent Events.
-- **Dependency-Aware**: Respects `depends_on` and waits for `healthcheck` pass before proceeding with dependent services.
-- **Single Binary**: The entire application, including the Frontend, is compiled into a single executable.
-
-## Web Dashboard
-
-Watcher serves a modern, dark-mode dashboard at `http://localhost:8080` (default).
-
-- **Dependency Graph**: Interactive visualization of your services and their relationships.
-- **Deployment Audit**: Full history of every sync, including commit messages, authors, and configuration snapshots.
-- **Inspector**: Click any service to view live resource usage charts and real-time logs.
-- **System Pulse**: Live status bar showing the current state of the reconciliation loop (Syncing, Reconciling, Idle).
-
-## API & Real-time Streams
+## API
 
 For advanced integration, Watcher exposes a clean REST and SSE API.
 
-| Endpoint                              | Type | Purpose                                           |
-| :------------------------------------ | :--- | :------------------------------------------------ |
-| `GET /api/history`                    | REST | List of past deployments and statuses.            |
-| `GET /api/current_deployment`         | REST | Returns the last successful (stable) deployment.  |
-| `GET /api/history/view?hash=...`      | REST | View the exact YAML config for a specific commit. |
-| `GET /api/graph`                      | REST | Current service status and dependency mapping.    |
-| `GET /api/stream/metrics?service=...` | SSE  | Real-time CPU/Mem metrics stream.                 |
-| `GET /api/stream/logs?service=...`    | SSE  | Live tail -f of container logs.                   |
-| `GET /api/system/events`               | SSE  | Real-time pulse of the GitOps engine.             |
+| Endpoint                      | Type | Purpose                                          |
+| :---------------------------- | :--- | :----------------------------------------------- |
+| `GET /api/deployment/history` | REST | List of past deployments and statuses.           |
+| `GET /api/deployment/current` | REST | Returns the last successful (stable) deployment. |
 
 ## Configuration
 
@@ -91,6 +42,7 @@ Watcher is configured via a `config.yaml` file.
 - `checkInterval` (integer): Seconds between checks (e.g., `30`).
 - `stateLocation` (string): Directory path for the BoltDB state file (e.g., `/etc/watcher`). Watcher will create `watcher.db` inside this directory.
 - `sshKeyPath` (string, optional): Path to the SSH private key (if not using SSH Agent).
+- `endpoint` (string, optional): To configure the rest endpoint for deployment data (default 0.0.0.0:7777)
 
 ## Git Authentication
 
@@ -131,43 +83,3 @@ Watcher is designed to run as a container alongside your workloads. It requires 
     ```
 
 3.  **Config File**: Create a `config.yaml` (see parameters above).
-
-### Docker Compose Example
-
-```yaml
-services:
-  watcher:
-    image: sithukyaw666/watcher:latest
-    container_name: watcher
-    restart: unless-stopped
-    environment:
-      # Forward SSH Agent for authentication
-      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
-      # Tell Watcher where to find the known_hosts file
-      - SSH_KNOWN_HOSTS=/home/appuser/.ssh/known_hosts
-    volumes:
-      # 1. Docker Socket: Required to manage containers
-      - /var/run/docker.sock:/var/run/docker.sock
-
-      # 2. Configuration: Mount your config file
-      - ./config.yaml:/home/appuser/config.yaml:ro
-
-      # 3. SSH Authentication: Forward the host's SSH Agent
-      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
-
-      # 4. SSH Security: Mount the known_hosts file generated above
-      - ./known_hosts:/home/appuser/.ssh/known_hosts:ro
-
-      # 5. Persistence: Persist the state database (History & Rollbacks)
-      - watcher_data:/etc/watcher/
-
-      # 6. Deployment Directory: Where the repo is cloned
-      # Ensure this path matches 'deploymentDir' in your config.yaml
-      - ./deployment:/app/deployment
-
-    ports:
-      - "8080:8080" # Access Dashboard
-
-volumes:
-  watcher_data:
-```
