@@ -71,15 +71,4 @@ sshKeyPath: /home/appuser/.ssh/id_rsa
 
 ## Running with Docker
 
-Watcher is designed to run as a container alongside your workloads. It requires access to the Docker socket and your SSH credentials.
-
-### Prerequisites
-
-1.  **Git Authentication**: Complete the [SSH Agent Setup](#1-ssh-agent-recommended)
-2.  Generate a `known_hosts` file for your Git provider:
-
-    ```bash
-    ssh-keyscan github.com > known_hosts
-    ```
-
-3.  **Config File**: Create a `config.yaml` (see parameters above).
+Comming soon
