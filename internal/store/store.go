@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,9 +10,8 @@ import (
 )
 
 const (
-	StatusSuccess    = "SUCCESS"
-	StatusFailed     = "FAILED"
-	StatusRolledBack = "ROLLED_BACK"
+	StatusSuccess = "SUCCESS"
+	StatusFailed  = "FAILED"
 )
 const BucketName = "deployment"
 
@@ -27,6 +27,8 @@ type Deployment struct {
 type Store struct {
 	db *bolt.DB
 }
+
+var ErrEmptyData = errors.New("empty data")
 
 func NewStore(dbPath string) (*Store, error) {
 	db, err := bolt.Open(dbPath, 0600, &bolt.Options{
@@ -90,7 +92,7 @@ func (s *Store) GetLastSuccessfulDeployment() (*Deployment, error) {
 	}
 
 	if lastSuccess == nil {
-		return nil, fmt.Errorf("no successful deployment found")
+		return nil, ErrEmptyData
 	}
 	return lastSuccess, nil
 }

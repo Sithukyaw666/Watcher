@@ -23,7 +23,7 @@ import (
 
 func main() {
 	// Create structured logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	healthCheck := flag.Bool("health-check", false, "Run a health check and exit.")
 	flag.Parse()
@@ -81,11 +81,13 @@ func main() {
 	}
 	defer s.Close()
 
-	server := api.NewServer(s, logger)
+	triggerChan := make(chan struct{}, 1)
+	server := api.NewServer(s, logger, triggerChan)
 	var endpoint string
 
 	if config.Endpoint == "" {
 		endpoint = ":7777"
+		logger.Warn("Endpoint is undefined. Using default endpoint", "endpoint", endpoint)
 	} else {
 		endpoint = config.Endpoint
 	}
@@ -94,7 +96,7 @@ func main() {
 		Handler:  server,
 		ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
-	logger.Info("API server initiated")
+	logger.Info("API server initiated on endpoint", "endpoint", endpoint)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("Server: failed to listen and serve", "error", err)
@@ -117,6 +119,10 @@ func main() {
 			cli.Client().Close()
 			srv.Shutdown(ctx)
 			return
+
+		case <-triggerChan:
+			logger.Info("Webhook Triggered, Starting deployment...")
+			runCycle(ctx, gitService, deployer, config, logger, s)
 		case <-time.After(time.Duration(config.CheckInterval) * time.Second):
 			logger.Info("Running periodic reconciliation check...")
 			runCycle(ctx, gitService, deployer, config, logger, s) // Pass logger

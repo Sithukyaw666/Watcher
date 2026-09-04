@@ -113,7 +113,7 @@ func TestGetLasrSuccessfulDeployment(t *testing.T) {
 		require.NoError(t, err)
 		defer s.Close()
 
-		statuses := []string{StatusSuccess, StatusFailed, StatusSuccess, StatusRolledBack}
+		statuses := []string{StatusSuccess, StatusFailed, StatusSuccess, StatusFailed}
 		for i, status := range statuses {
 			s.AddDeployment(Deployment{
 				ID:            fmt.Sprintf("%d", i),
@@ -137,7 +137,7 @@ func TestGetLasrSuccessfulDeployment(t *testing.T) {
 		require.NoError(t, err)
 		defer s.Close()
 
-		statuses := []string{StatusFailed, StatusRolledBack}
+		statuses := []string{StatusFailed}
 		for i, status := range statuses {
 			s.AddDeployment(Deployment{
 				ID:            fmt.Sprintf("%d", i),

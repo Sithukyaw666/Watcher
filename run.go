@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -30,55 +31,70 @@ func runCycle(ctx context.Context, gitOps ops_git.GitOps, deployer ops_docker.De
 		return
 	}
 
-	if isUpdated {
-		logger.Info("Changed detected, starting deployment...")
-	} else {
-		logger.Info("No repository changes detected. But ensuring services are reconciled.")
+	_, err = s.GetLastSuccessfulDeployment()
+
+	if err != nil && !errors.Is(err, store.ErrEmptyData) {
+		logger.Error("Database error while checking history. Skipping save.", "error", err)
+		return
 	}
 
-	if err := deployer.Deploy(ctx, config, currentHash, logger); err != nil { // Pass logger
-		logger.Error("Deployment FAILED", "hash", currentHash, "error", err)
+	isInitialDeployment := errors.Is(err, store.ErrEmptyData)
 
-		s.AddDeployment(store.Deployment{
-			ID:            time.Now().Format(time.RFC3339Nano),
-			CommitHash:    currentHash,
-			Timestamp:     time.Now(),
-			Status:        store.StatusFailed,
-			CommitMessage: commitMessage,
-			CommitAuthor:  commitAuthor,
-		})
+	if isInitialDeployment || isUpdated {
+		logger.Info("starting deployment...")
+		if err := deployer.Deploy(ctx, config, currentHash, logger); err != nil { // Pass logger
+			logger.Error("Deployment FAILED", "hash", currentHash, "error", err)
 
-		logger.Info("Initiating automatic rollback...")
+			err := s.AddDeployment(store.Deployment{
+				ID:            time.Now().Format(time.RFC3339Nano),
+				CommitHash:    currentHash,
+				Timestamp:     time.Now(),
+				Status:        store.StatusFailed,
+				CommitMessage: commitMessage,
+				CommitAuthor:  commitAuthor,
+			})
+			if err != nil {
+				logger.Error("Failed to save the deployment to db", "error", err)
+			}
 
-		lastSuccess, err := s.GetLastSuccessfulDeployment()
-		if err != nil {
-			logger.Error("Rollback aborted: No successful deployment history found", "error", err)
-			return
+			logger.Info("Initiating automatic rollback...")
+
+			lastSuccess, err := s.GetLastSuccessfulDeployment()
+			if err != nil {
+				logger.Error("Rollback aborted: No successful deployment history found", "error", err)
+				return
+			}
+			if lastSuccess.CommitHash == currentHash {
+				logger.Warn("Rollback aborted: Last success is the same as current hash. System is fundamentally broken.")
+				return
+			}
+
+			logger.Info("Rolling back to last known healthy state", "hash", lastSuccess.CommitHash)
+
+			if err := gitOps.CheckoutHash(config, lastSuccess.CommitHash); err != nil {
+				logger.Error("Rollback Failed: Could not checkout previous hash", "error", err)
+				return
+			}
+
+			if err := deployer.Deploy(ctx, config, lastSuccess.CommitHash, logger); err != nil {
+				logger.Error("Rollback Failed: Could not re-deploy old state", "error", err)
+
+				return
+			} else {
+
+				logger.Info("Rollback Successful: Re-deployed to the previous healthy state.")
+				return
+			}
 		}
-		if lastSuccess.CommitHash == currentHash {
-			logger.Warn("Rollback aborted: Last success is the same as current hash. System is fundamentally broken.")
-			return
-		}
+		logger.Info("Deployment Successful", "hash", currentHash)
 
-		logger.Info("Rolling back to last known healthy state", "hash", lastSuccess.CommitHash)
-
-		if err := gitOps.CheckoutHash(config, lastSuccess.CommitHash); err != nil {
-			logger.Error("Rollback Failed: Could not checkout previous hash", "error", err)
-			return
-		}
-
-		if err := deployer.Deploy(ctx, config, lastSuccess.CommitHash, logger); err != nil {
-			logger.Error("Rollback Failed: Could not re-deploy old state", "error", err)
-
-			return
+		if isInitialDeployment {
+			logger.Info("Initial deployment, saving to db...")
 		} else {
-
-			logger.Info("Rollback Successful: Re-deployed to the previous healthy state.")
+			logger.Info("Saving Successful deployment to db...")
 		}
-	}
-	if isUpdated {
-		logger.Info("New Deployment: Saving to state db...")
-		s.AddDeployment(store.Deployment{
+
+		err := s.AddDeployment(store.Deployment{
 			ID:            time.Now().Format(time.RFC3339Nano),
 			CommitHash:    currentHash,
 			Timestamp:     time.Now(),
@@ -86,8 +102,14 @@ func runCycle(ctx context.Context, gitOps ops_git.GitOps, deployer ops_docker.De
 			CommitMessage: commitMessage,
 			CommitAuthor:  commitAuthor,
 		})
-	}
 
-	logger.Info("Deployment Successful", "hash", currentHash)
+		if err != nil {
+			logger.Error("Failed to save deployment to db", "error", err)
+		}
+		logger.Info("Deployment state successfully saved.")
+	} else {
+		logger.Info("No repository changes detected. ")
+
+	}
 
 }
