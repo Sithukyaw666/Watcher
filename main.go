@@ -82,7 +82,7 @@ func main() {
 	defer s.Close()
 
 	triggerChan := make(chan struct{}, 1)
-	server := api.NewServer(s, logger, triggerChan)
+	server := api.NewServer(config, s, logger, triggerChan)
 	var endpoint string
 
 	if config.Endpoint == "" {
@@ -119,7 +119,6 @@ func main() {
 			cli.Client().Close()
 			srv.Shutdown(ctx)
 			return
-
 		case <-triggerChan:
 			logger.Info("Webhook Triggered, Starting deployment...")
 			runCycle(ctx, gitService, deployer, config, logger, s)
