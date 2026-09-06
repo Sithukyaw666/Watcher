@@ -10,15 +10,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sithukyaw666/watcher/internal/model"
+	"github.com/sithukyaw666/watcher/internal/config"
 	"github.com/sithukyaw666/watcher/internal/store"
 )
 
+type DeploymentQuerier interface {
+	GetLastSuccessfulDeployment() (*store.Deployment, error)
+	GetAllDeployments() ([]store.Deployment, error)
+}
+
 type Server struct {
 	logger *slog.Logger
-	store  store.DeploymentQuerier
+	store  DeploymentQuerier
 	http.Handler
-	config      model.Config
+	config      config.Config
 	triggerChan chan<- struct{}
 }
 
@@ -31,7 +36,7 @@ const ResponseContentType = "application/json"
 const GITHUB_HMAC_HEADER = "X-Hub-Signature-256"
 const PAYLOAD_SIZE = 25 * 1024 * 1024 //25MB
 
-func NewServer(config model.Config, store store.DeploymentQuerier, logger *slog.Logger, triggerChan chan<- struct{}) *Server {
+func NewServer(config config.Config, store DeploymentQuerier, logger *slog.Logger, triggerChan chan<- struct{}) *Server {
 	s := new(Server)
 	mux := http.NewServeMux()
 

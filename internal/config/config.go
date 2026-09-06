@@ -1,15 +1,26 @@
-package main
+package config
 
 import (
 	"fmt"
 
-	"github.com/sithukyaw666/watcher/internal/model"
 	"github.com/spf13/viper"
 )
 
-func LoadConfig() (model.Config, error) {
+type Config struct {
+	RepoURL       string
+	DeploymentDir string
+	ComposeFile   string
+	TargetBranch  string
+	SSHKeyPath    string
+	StateLocation string
+	CheckInterval int
+	Endpoint      string
+	WebhookSecret string
+}
 
-	config := new(model.Config)
+func LoadConfig() (Config, error) {
+
+	config := new(Config)
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml") // or "json" or other formats you prefer
 	viper.AddConfigPath(".")    // look for the config in the current directory
@@ -21,7 +32,7 @@ func LoadConfig() (model.Config, error) {
 	}
 
 	// Unmarshal config into Config struct
-	if err := viper.Unmarshal(&config); err != nil {
+	if err := viper.Unmarshal(config); err != nil {
 		return *config, fmt.Errorf("unable to unmarshal config: %w", err)
 	}
 

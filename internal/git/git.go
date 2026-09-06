@@ -1,4 +1,4 @@
-package ops_git
+package gitops
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
-	"github.com/sithukyaw666/watcher/internal/model"
+	"github.com/sithukyaw666/watcher/internal/config"
 	"github.com/sithukyaw666/watcher/internal/store"
 )
 
@@ -18,7 +18,7 @@ type GitService struct {
 	auth   ssh.AuthMethod
 }
 
-func NewGitService(config model.Config, logger *slog.Logger) (*GitService, error) {
+func NewGitService(config config.Config, logger *slog.Logger) (*GitService, error) {
 	auth, err := initGitAuth(logger, config)
 	if err != nil {
 		logger.Warn("SSH auth not available, proceeding without auth", "error", err)
@@ -57,7 +57,7 @@ func NewGitService(config model.Config, logger *slog.Logger) (*GitService, error
 
 }
 
-func initGitAuth(logger *slog.Logger, config model.Config) (auth ssh.AuthMethod, err error) {
+func initGitAuth(logger *slog.Logger, config config.Config) (auth ssh.AuthMethod, err error) {
 	if os.Getenv("SSH_AUTH_SOCK") != "" {
 		logger.Info("SSH Agent detected, attempting authentication.")
 		auth, err = ssh.NewSSHAgentAuth("git")
@@ -80,7 +80,11 @@ func initGitAuth(logger *slog.Logger, config model.Config) (auth ssh.AuthMethod,
 
 }
 
-func (g *GitService) FetchRepo(config model.Config, s store.LastDeploymentQuerier) (bool, error) {
+type LastDeploymentQuerier interface {
+	GetLastDeployment() (*store.Deployment, error)
+}
+
+func (g *GitService) FetchRepo(config config.Config, s LastDeploymentQuerier) (bool, error) {
 
 	headRef, err := g.repo.Head()
 	if err != nil {
@@ -150,7 +154,7 @@ func (g *GitService) FetchRepo(config model.Config, s store.LastDeploymentQuerie
 
 }
 
-func (g *GitService) GetCurrentHash(config model.Config) (string, error) {
+func (g *GitService) GetCurrentHash() (string, error) {
 	head, err := g.repo.Head()
 	if err != nil {
 		return "", err
@@ -158,7 +162,7 @@ func (g *GitService) GetCurrentHash(config model.Config) (string, error) {
 	return head.Hash().String(), nil
 }
 
-func (g *GitService) CheckoutHash(config model.Config, hash string) error {
+func (g *GitService) CheckoutHash(hash string) error {
 	w, err := g.repo.Worktree()
 	if err != nil {
 		return err
@@ -178,7 +182,7 @@ func (g *GitService) CheckoutHash(config model.Config, hash string) error {
 	})
 }
 
-func (g *GitService) GetCommitInfo(config model.Config, hash string) (string, string, error) {
+func (g *GitService) GetCommitInfo(hash string) (string, string, error) {
 	h := plumbing.NewHash(hash)
 	if h.IsZero() {
 		return "", "", fmt.Errorf("invalid commit hash: %q", hash)

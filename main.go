@@ -16,8 +16,9 @@ import (
 	"github.com/docker/cli/cli/flags"
 	"github.com/moby/moby/client"
 	"github.com/sithukyaw666/watcher/internal/api"
-	ops_docker "github.com/sithukyaw666/watcher/internal/docker"
-	ops_git "github.com/sithukyaw666/watcher/internal/git"
+	"github.com/sithukyaw666/watcher/internal/config"
+	"github.com/sithukyaw666/watcher/internal/docker"
+	gitops "github.com/sithukyaw666/watcher/internal/git"
 	"github.com/sithukyaw666/watcher/internal/store"
 )
 
@@ -59,7 +60,7 @@ func main() {
 
 	logger.Info("WatcherCD starting...")
 
-	config, err := LoadConfig()
+	config, err := config.LoadConfig()
 	if err != nil {
 		logger.Error("Failed to load configuration", "error", err)
 		os.Exit(1)
@@ -104,25 +105,28 @@ func main() {
 	}()
 
 	logger.Info("Performing initial reconciliation check...")
-	deployer := ops_docker.NewComposeDeployer(cli)
-	gitService, err := ops_git.NewGitService(config, logger)
+	deployer := docker.NewComposeDeployer(cli)
+	gitService, err := gitops.NewGitService(config, logger)
 	if err != nil {
 		logger.Error("failed to initiate the git gitService", "error", err)
 		os.Exit(1)
 	}
-	runCycle(ctx, gitService, deployer, config, logger, s) // Pass logger
-
+	runCycle(ctx, gitService, deployer, config, logger, s)
+	ticker := time.NewTicker(time.Duration(config.CheckInterval) * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("Shutdown signal received. Exiting gracefully.")
 			cli.Client().Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 			srv.Shutdown(ctx)
 			return
 		case <-triggerChan:
 			logger.Info("Webhook Triggered, Starting deployment...")
 			runCycle(ctx, gitService, deployer, config, logger, s)
-		case <-time.After(time.Duration(config.CheckInterval) * time.Second):
+		case <-ticker.C:
 			logger.Info("Running periodic reconciliation check...")
 			runCycle(ctx, gitService, deployer, config, logger, s) // Pass logger
 		}

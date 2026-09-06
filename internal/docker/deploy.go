@@ -1,4 +1,4 @@
-package ops_docker
+package docker
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
-	"github.com/sithukyaw666/watcher/internal/model"
+	"github.com/sithukyaw666/watcher/internal/config"
 )
 
 type ComposeDeployer struct {
@@ -22,7 +22,7 @@ func NewComposeDeployer(cli command.Cli) *ComposeDeployer {
 	}
 }
 
-func (d *ComposeDeployer) Deploy(ctx context.Context, config model.Config, hash string, logger *slog.Logger) error {
+func (d *ComposeDeployer) Deploy(ctx context.Context, config config.Config, hash string, logger *slog.Logger) error {
 
 	projectName := filepath.Base(config.DeploymentDir)
 	logger.Info("Using project name", "project_name", projectName)

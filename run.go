@@ -6,13 +6,29 @@ import (
 	"log/slog"
 	"time"
 
-	ops_docker "github.com/sithukyaw666/watcher/internal/docker"
-	ops_git "github.com/sithukyaw666/watcher/internal/git"
-	"github.com/sithukyaw666/watcher/internal/model"
+	"github.com/sithukyaw666/watcher/internal/config"
+	gitops "github.com/sithukyaw666/watcher/internal/git"
 	"github.com/sithukyaw666/watcher/internal/store"
 )
 
-func runCycle(ctx context.Context, gitOps ops_git.GitOps, deployer ops_docker.Deployer, config model.Config, logger *slog.Logger, s store.DeploymentStore) {
+type DeploymentStore interface {
+	AddDeployment(d store.Deployment) error
+	GetLastSuccessfulDeployment() (*store.Deployment, error)
+	GetLastDeployment() (*store.Deployment, error)
+}
+
+type GitOps interface {
+	FetchRepo(config config.Config, s gitops.LastDeploymentQuerier) (bool, error)
+	GetCurrentHash() (string, error)
+	GetCommitInfo(hash string) (string, string, error)
+	CheckoutHash(hash string) error
+}
+
+type Deployer interface {
+	Deploy(ctx context.Context, config config.Config, hash string, logger *slog.Logger) error
+}
+
+func runCycle(ctx context.Context, gitOps GitOps, deployer Deployer, config config.Config, logger *slog.Logger, s DeploymentStore) {
 
 	isUpdated, err := gitOps.FetchRepo(config, s) // Pass logger
 	if err != nil {
@@ -20,12 +36,12 @@ func runCycle(ctx context.Context, gitOps ops_git.GitOps, deployer ops_docker.De
 		return
 	}
 
-	currentHash, err := gitOps.GetCurrentHash(config)
+	currentHash, err := gitOps.GetCurrentHash()
 	if err != nil {
 		logger.Error("Failed to get current hash", "error", err)
 		return
 	}
-	commitMessage, commitAuthor, err := gitOps.GetCommitInfo(config, currentHash)
+	commitMessage, commitAuthor, err := gitOps.GetCommitInfo(currentHash)
 	if err != nil {
 		logger.Error("Failed to get commit info", "error", err)
 		return
@@ -71,7 +87,7 @@ func runCycle(ctx context.Context, gitOps ops_git.GitOps, deployer ops_docker.De
 
 			logger.Info("Rolling back to last known healthy state", "hash", lastSuccess.CommitHash)
 
-			if err := gitOps.CheckoutHash(config, lastSuccess.CommitHash); err != nil {
+			if err := gitOps.CheckoutHash(lastSuccess.CommitHash); err != nil {
 				logger.Error("Rollback Failed: Could not checkout previous hash", "error", err)
 				return
 			}
@@ -87,12 +103,6 @@ func runCycle(ctx context.Context, gitOps ops_git.GitOps, deployer ops_docker.De
 			}
 		}
 		logger.Info("Deployment Successful", "hash", currentHash)
-
-		if isInitialDeployment {
-			logger.Info("Initial deployment, saving to db...")
-		} else {
-			logger.Info("Saving Successful deployment to db...")
-		}
 
 		err := s.AddDeployment(store.Deployment{
 			ID:            time.Now().Format(time.RFC3339Nano),

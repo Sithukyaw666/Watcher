@@ -1,4 +1,4 @@
-package ops_git
+package gitops
 
 import (
 	"log/slog"
@@ -11,7 +11,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-jose/go-jose/v4/testutils/require"
 	"github.com/go-openapi/testify/v2/assert"
-	"github.com/sithukyaw666/watcher/internal/model"
+	"github.com/sithukyaw666/watcher/internal/config"
 	"github.com/sithukyaw666/watcher/internal/store"
 )
 
@@ -38,7 +38,7 @@ func TestCloneOrFetchRepo(t *testing.T) {
 		Author: &object.Signature{Name: "test", Email: "test@test.com", When: time.Now()},
 	})
 	require.NoError(t, err)
-	config := model.Config{
+	config := config.Config{
 		DeploymentDir: t.TempDir(),
 		RepoURL:       repoPath,
 		ComposeFile:   "docker-compose.yaml",
@@ -115,7 +115,7 @@ func TestGetCurrentHash(t *testing.T) {
 
 		remoteCommitHash := headRef.Hash().String()
 		require.NoError(t, err)
-		config := model.Config{
+		config := config.Config{
 			DeploymentDir: t.TempDir(),
 			RepoURL:       repoPath,
 			ComposeFile:   "docker-compose.yaml",
@@ -133,7 +133,7 @@ func TestGetCurrentHash(t *testing.T) {
 		_, err = gitService.FetchRepo(config, mock)
 		require.NoError(t, err)
 
-		currentHash, err := gitService.GetCurrentHash(config)
+		currentHash, err := gitService.GetCurrentHash()
 		require.NoError(t, err)
 		assert.Equal(t, remoteCommitHash, currentHash)
 	})
@@ -161,7 +161,7 @@ func TestCheckoutHash(t *testing.T) {
 		Author: &object.Signature{Name: "test", Email: "test@test.com", When: time.Now()},
 	})
 	require.NoError(t, err)
-	config := model.Config{
+	config := config.Config{
 		DeploymentDir: t.TempDir(),
 		RepoURL:       repoPath,
 		ComposeFile:   "docker-compose.yaml",
@@ -179,21 +179,21 @@ func TestCheckoutHash(t *testing.T) {
 	require.NoError(t, err)
 	t.Run("it should checkout to targeted hash", func(t *testing.T) {
 
-		err = gitService.CheckoutHash(config, firstCommitHash)
+		err = gitService.CheckoutHash(firstCommitHash)
 		require.NoError(t, err)
-		currenthash, err := gitService.GetCurrentHash(config)
+		currenthash, err := gitService.GetCurrentHash()
 		require.NoError(t, err)
 		assert.Equal(t, firstCommitHash, currenthash)
 
 	})
 
 	t.Run("it should return error on invalid hash", func(t *testing.T) {
-		err := gitService.CheckoutHash(config, "not-existed-hash")
+		err := gitService.CheckoutHash("not-existed-hash")
 		assert.NotNil(t, err, "expected error but got none")
 	})
 	t.Run("it should return error on valid hash format but non existence", func(t *testing.T) {
 		hash := "a64396050c5bb118f935296043777a71c90f7905"
-		err := gitService.CheckoutHash(config, hash)
+		err := gitService.CheckoutHash(hash)
 		assert.NotNil(t, err, "expected error but got none")
 	})
 
@@ -215,7 +215,7 @@ func TestGetCommitInfo(t *testing.T) {
 		Author: &object.Signature{Name: authorName, Email: "test@test.com", When: time.Now()},
 	})
 	require.NoError(t, err)
-	config := model.Config{
+	config := config.Config{
 		DeploymentDir: t.TempDir(),
 		RepoURL:       repoPath,
 		ComposeFile:   "docker-compose.yaml",
@@ -233,20 +233,20 @@ func TestGetCommitInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("it should return commit info ", func(t *testing.T) {
-		hash, err := gitService.GetCurrentHash(config)
+		hash, err := gitService.GetCurrentHash()
 		assert.NoError(t, err)
-		msg, author, err := gitService.GetCommitInfo(config, hash)
+		msg, author, err := gitService.GetCommitInfo(hash)
 		assert.NoError(t, err)
 		assert.Equal(t, authorName, author)
 		assert.Equal(t, commitMsg, msg)
 	})
 	t.Run("it should return error on invalid hash", func(t *testing.T) {
-		_, _, err = gitService.GetCommitInfo(config, "invalid")
+		_, _, err = gitService.GetCommitInfo("invalid")
 		assert.NotNil(t, err, "expected error but got none")
 	})
 	t.Run("it should return error on valid hash format but non existence", func(t *testing.T) {
 		hash := "a64396050c5bb118f935296043777a71c90f7905"
-		_, _, err := gitService.GetCommitInfo(config, hash)
+		_, _, err := gitService.GetCommitInfo(hash)
 		assert.NotNil(t, err, "expected error but got none")
 	})
 

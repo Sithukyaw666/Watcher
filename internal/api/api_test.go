@@ -12,22 +12,19 @@ import (
 	"time"
 
 	"github.com/go-openapi/testify/v2/assert"
-	"github.com/sithukyaw666/watcher/internal/model"
+	"github.com/sithukyaw666/watcher/internal/config"
 	"github.com/sithukyaw666/watcher/internal/store"
 )
 
 type mockStore struct {
 	GetAllDeploymentsFunc           func() ([]store.Deployment, error)
-	GetLastDeploymentFunc           func() (*store.Deployment, error)
 	GetLastSuccessfulDeploymentFunc func() (*store.Deployment, error)
 }
 
 func (m *mockStore) GetAllDeployments() ([]store.Deployment, error) {
 	return m.GetAllDeploymentsFunc()
 }
-func (m *mockStore) GetLastDeployment() (*store.Deployment, error) {
-	return m.GetLastDeploymentFunc()
-}
+
 func (m *mockStore) GetLastSuccessfulDeployment() (*store.Deployment, error) {
 	return m.GetLastSuccessfulDeploymentFunc()
 }
@@ -35,7 +32,7 @@ func (m *mockStore) GetLastSuccessfulDeployment() (*store.Deployment, error) {
 func TestHealthCheck(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	mock := &mockStore{}
-	server := NewServer(model.Config{}, mock, logger, make(chan<- struct{}))
+	server := NewServer(config.Config{}, mock, logger, make(chan<- struct{}))
 
 	t.Run("it should return 200 on /healthz route", func(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -86,7 +83,7 @@ func TestGetAllDeployment(t *testing.T) {
 
 		json.NewEncoder(&expected).Encode(expectedResp)
 
-		server := NewServer(model.Config{}, mock, logger, make(chan<- struct{}))
+		server := NewServer(config.Config{}, mock, logger, make(chan<- struct{}))
 
 		request := httptest.NewRequest(http.MethodGet, "/api/deployment/history", nil)
 		response := httptest.NewRecorder()
@@ -112,7 +109,7 @@ func TestGetAllDeployment(t *testing.T) {
 		}
 		json.NewEncoder(&expected).Encode(expectedResp)
 
-		server := NewServer(model.Config{}, mock, logger, make(chan<- struct{}))
+		server := NewServer(config.Config{}, mock, logger, make(chan<- struct{}))
 
 		request := httptest.NewRequest(http.MethodGet, "/api/deployment/history", nil)
 		response := httptest.NewRecorder()
@@ -138,7 +135,7 @@ func TestGetAllDeployment(t *testing.T) {
 		}
 		json.NewEncoder(&expected).Encode(expectedResp)
 
-		server := NewServer(model.Config{}, mock, logger, make(chan<- struct{}))
+		server := NewServer(config.Config{}, mock, logger, make(chan<- struct{}))
 
 		request := httptest.NewRequest(http.MethodGet, "/api/deployment/history", nil)
 		response := httptest.NewRecorder()
@@ -177,7 +174,7 @@ func TestGetLastSuccessfulDeployment(t *testing.T) {
 		}
 
 		json.NewEncoder(&expected).Encode(expectedResp)
-		server := NewServer(model.Config{}, mock, logger, make(chan<- struct{}))
+		server := NewServer(config.Config{}, mock, logger, make(chan<- struct{}))
 		request := httptest.NewRequest(http.MethodGet, "/api/deployment/current", nil)
 		response := httptest.NewRecorder()
 
@@ -201,7 +198,7 @@ func TestGetLastSuccessfulDeployment(t *testing.T) {
 		}
 
 		json.NewEncoder(&expected).Encode(expectedResp)
-		server := NewServer(model.Config{}, mock, logger, make(chan<- struct{}))
+		server := NewServer(config.Config{}, mock, logger, make(chan<- struct{}))
 		request := httptest.NewRequest(http.MethodGet, "/api/deployment/current", nil)
 		response := httptest.NewRecorder()
 
@@ -225,7 +222,7 @@ func TestGetLastSuccessfulDeployment(t *testing.T) {
 		}
 
 		json.NewEncoder(&expected).Encode(expectedResp)
-		server := NewServer(model.Config{}, mock, logger, make(chan<- struct{}))
+		server := NewServer(config.Config{}, mock, logger, make(chan<- struct{}))
 		request := httptest.NewRequest(http.MethodGet, "/api/deployment/current", nil)
 		response := httptest.NewRecorder()
 
@@ -240,7 +237,7 @@ func TestGetLastSuccessfulDeployment(t *testing.T) {
 
 func TestWebhookCallWithGITHUB(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	config := model.Config{
+	c := config.Config{
 		WebhookSecret: "It's a Secret to Everybody",
 	}
 	t.Run("it should send the empty struct into channel on POST ", func(t *testing.T) {
@@ -251,7 +248,7 @@ func TestWebhookCallWithGITHUB(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/api/webhook", payload)
 		request.Header.Add(GITHUB_HMAC_HEADER, sig)
 		response := httptest.NewRecorder()
-		server := NewServer(config, &mockStore{}, logger, triggerChan)
+		server := NewServer(c, &mockStore{}, logger, triggerChan)
 		server.ServeHTTP(response, request)
 		assert.Equal(t, http.StatusAccepted, response.Code)
 		select {
@@ -266,7 +263,7 @@ func TestWebhookCallWithGITHUB(t *testing.T) {
 		triggerChan := make(chan struct{}, 1)
 		request := httptest.NewRequest(http.MethodGet, "/api/webhook", nil)
 		response := httptest.NewRecorder()
-		server := NewServer(config, &mockStore{}, logger, triggerChan)
+		server := NewServer(c, &mockStore{}, logger, triggerChan)
 		server.ServeHTTP(response, request)
 		assert.Equal(t, http.StatusMethodNotAllowed, response.Code)
 	})
@@ -274,7 +271,7 @@ func TestWebhookCallWithGITHUB(t *testing.T) {
 		triggerChan := make(chan struct{}, 1)
 		request := httptest.NewRequest(http.MethodPost, "/api/webhook", nil)
 		response := httptest.NewRecorder()
-		server := NewServer(config, &mockStore{}, logger, triggerChan)
+		server := NewServer(c, &mockStore{}, logger, triggerChan)
 		server.ServeHTTP(response, request)
 		assert.Equal(t, http.StatusBadRequest, response.Code)
 
@@ -287,7 +284,7 @@ func TestWebhookCallWithGITHUB(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/api/webhook", payload)
 		request.Header.Add(GITHUB_HMAC_HEADER, sig)
 		response := httptest.NewRecorder()
-		server := NewServer(config, &mockStore{}, logger, triggerChan)
+		server := NewServer(c, &mockStore{}, logger, triggerChan)
 		server.ServeHTTP(response, request)
 		assert.Equal(t, http.StatusBadRequest, response.Code)
 
@@ -300,7 +297,8 @@ func TestWebhookCallWithGITHUB(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/api/webhook", payload)
 		request.Header.Add(GITHUB_HMAC_HEADER, sig)
 		response := httptest.NewRecorder()
-		server := NewServer(model.Config{}, &mockStore{}, logger, triggerChan)
+
+		server := NewServer(config.Config{}, &mockStore{}, logger, triggerChan)
 		server.ServeHTTP(response, request)
 		assert.Equal(t, http.StatusNotFound, response.Code)
 
